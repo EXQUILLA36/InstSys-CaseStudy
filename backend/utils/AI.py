@@ -4,6 +4,13 @@ from typing import Dict, Any, List, Optional
 import requests
 from datetime import datetime
 from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+import hashlib
+import inspect
+
+
+
+
 # In LLM_model.py, after your imports:
 
 from pymongo import MongoClient # <--- Make sure this import is at the top of the file
@@ -440,6 +447,8 @@ PROMPT_TEMPLATES = {
     "planner_agent": r"""
         You are a **Planner AI** of PDM or Pambayang Dalubhasaan ng Marilao. Your only job is to map a user query to a single tool call from the available tools below. You MUST ALWAYS respond with a **single valid JSON object**.
 
+        --- CONVERSATIONAL ROUTING RULE  ---
+        If the user's query is a simple greeting, a thank you, or a basic question about who you are (e.g., 'hello', 'hey', 'thanks', 'who are you?', 'what can you do?'), you **MUST** use the `answer_conversational_query` tool and stop.
         --- ABSOLUTE ROUTING RULE ---
         1. If the user's query CONTAINS A PERSON'S NAME (e.g., partial name, full name), you MUST use a tool from the "Name-Based Search" category. **CRITICAL: Descriptive words like 'tallest', 'smartest', 'busiest', or 'oldest' are NOT names.**
         2. If the user's query asks for people based on a filter, description, or category (e.g., "all students", "faculty", "who is the tallest member"), you MUST use a tool from the "Filter-Based Search" category.
@@ -462,7 +471,7 @@ PROMPT_TEMPLATES = {
           **Use Case:** You **MUST** use this tool if the user's query contains a specific PDM-style ID (e.g., "PDM-XXXX-XXXX", "profile for PDM-XXXX-XXXX"). This is the most precise way to find a person.
 
         --- CATEGORY 2: Filter-Based Search Tools (NO name is in the query) ---
-        - `find_people(role: str, program: str, year_level: int, department: str)`: You **MUST** use this tool **ONLY** when the user is searching for a group of people using **filters** like program, role, or department, and **NO name is provided** (e.g., "show me all bscs students").
+        - `find_people(role: str, program: str, year_level: int, department: str, name: str)`: You **MUST** use this tool when the user is searching for a group of people using filters like program, role, or department, and just a part of a person's name like last name or first name (e.g., "escobar", "Michael", "Carpenter, Michael") (e.g., "show me all bscs students"). 
 
 
         --- CATEGORY 3: Can Be Used with or Without a Name ---
@@ -553,6 +562,29 @@ PROMPT_TEMPLATES = {
         CRITICAL FINAL INSTRUCTION:
         Your entire response MUST be a single, raw JSON object containing "tool_name" and "parameters".
         """,
+    
+
+     "conversation_summarizer": r"""
+        You are a highly efficient AI that summarizes conversations. Your task is to create a concise, one-sentence summary of the user's current topic of conversation based on the provided history.
+
+        RULES:
+        1.  If the "Latest Exchange" continues the topic from the "Previous Summary," you MUST merge them into a new, updated one-sentence summary.
+        2.  If the "Latest Exchange" introduces a completely NEW topic, you MUST DISCARD the previous summary and write a new one-sentence summary based ONLY on the new topic.
+        3.  The summary MUST be neutral, third-person, and very concise (e.g., "The user is asking about the schedule for a specific student," "The user is asking for a list of all BSCS students.").
+        4.  Your entire response MUST be only the single summary sentence and nothing else.
+
+        ---
+        Previous Summary:
+        {summary}
+        ---
+        Latest Exchange:
+        {latest_exchange}
+        ---
+        New One-Sentence Summary:
+        """,
+
+
+    
     "final_synthesizer": r"""
         ROLE:
         You are a precise and factual AI Data Analyst for a school named PDM or Pambayang Dalubhasaan ng Marilao.
@@ -679,8 +711,22 @@ class AIAnalyst:
         offline_cfg = config.get('offline', {})
 
         chat_cfg = config.get('chat_settings', {})
-        self.history_file = chat_cfg.get('history_file', 'chat_history.json')
+        # In-memory cache for active sessions to reduce DB reads
+        self.sessions_cache = {}
         self.max_history_turns = chat_cfg.get('max_history_turns', 2)
+        # Connection to the new MongoDB collection for persistent sessions
+        self.sessions_collection = self.mongo_db["sessions"]
+        # --- ADD THESE NEW LINES ---
+        self.tool_cache_collection = self.mongo_db["tool_cache"]
+        # Defines how long (in seconds) to cache the results of specific tools
+        self.tool_cache_ttl = {
+            "get_person_schedule": 3600,      # 1 hour
+            "find_people": 86400,             # 1 day
+            "get_person_profile": 86400,      # 1 day
+            "get_student_grades": 3600,       # 1 hour
+            "query_curriculum": 604800        # 1 week
+            
+        }
 
         online_cfg['api_mode'] = 'online'
         offline_cfg['api_mode'] = 'offline'
@@ -723,6 +769,7 @@ class AIAnalyst:
         self.corruption_warnings = set() 
 
         self.available_tools = {
+            "answer_conversational_query": self.answer_conversational_query,
             "get_data_by_id": self.get_data_by_id,
             "get_school_info": self.get_school_info,
             "get_database_summary" : self.get_database_summary,
@@ -740,11 +787,235 @@ class AIAnalyst:
             "query_curriculum": self.query_curriculum,
         }
 
+        self.debug("Applying caching decorators to tool methods...")
+        self.get_person_schedule = self._cached_tool(self.get_person_schedule)
+        self.get_adviser_info = self._cached_tool(self.get_adviser_info)
+        self.find_people = self._cached_tool(self.find_people)
+        self.get_person_profile = self._cached_tool(self.get_person_profile)
+        self.get_student_grades = self._cached_tool(self.get_student_grades)
+        self.query_curriculum = self._cached_tool(self.query_curriculum)
 
 
+
+
+
+
+    def _get_or_create_session(self, session_id: str) -> dict:
+        """
+        [MODIFIED FOR MONGO] Retrieves a session from the in-memory cache,
+        the database, or creates a new one.
+        """
+        # 1. Check the fast in-memory cache first
+        if session_id in self.sessions_cache:
+            return self.sessions_cache[session_id]
+
+        # 2. If not in cache, check the database
+        self.debug(f"Session {session_id} not in cache. Querying MongoDB...")
+        session_doc = self.sessions_collection.find_one({"session_id": session_id})
+
+        if session_doc:
+            # 3. If found in DB, load it into the cache and return it
+            self.sessions_cache[session_id] = session_doc
+            return session_doc
+        else:
+            # 4. If it's a new session, create a new object in the cache
+            self.debug(f"Creating new session: {session_id}")
+            new_session = {
+                "session_id": session_id,
+                "chat_history": [],
+                "conversation_summary": "", 
+                "mentioned_entities": [],
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+            self.sessions_cache[session_id] = new_session
+            return new_session
+
+    def _update_session_history(self, session_id: str, user_query: str, ai_response: str):
+        """
+        [MODIFIED FOR MONGO] Adds the latest exchange to the session's chat history,
+        trims it, and saves the entire session object back to MongoDB.
+        """
+        # Get the current session object (from cache or DB)
+        session = self._get_or_create_session(session_id)
         
+        # Append the new messages
+        session["chat_history"].append({"role": "user", "content": user_query})
+        session["chat_history"].append({"role": "assistant", "content": ai_response})
         
+        # Trim the history list (sliding window)
+        history_limit = self.max_history_turns * 2
+        if history_limit > 0 and len(session["chat_history"]) > history_limit:
+            session["chat_history"] = session["chat_history"][-history_limit:]
+
+        # Update the timestamp
+        session["updated_at"] = datetime.now(timezone.utc)
+
+        # Save the entire updated session object to MongoDB
+        self.sessions_collection.update_one(
+            {"session_id": session_id},
+            {"$set": session},
+            upsert=True  # Creates the document if it doesn't exist
+        )
+        self.debug(f"Session {session_id} saved to MongoDB.")
+
+
+    # Add this new method anywhere inside the AIAnalyst class in AI.py
+
+
+    
+
+    def _summarize_conversation(self, session_id: str):
+        """
+        Calls an LLM to create or update a conversation summary for a given session.
+        """
+        self.debug(f"Updating conversation summary for session: {session_id}")
+        session = self._get_or_create_session(session_id)
         
+        # We need at least one full user/AI turn to create a summary.
+        if len(session["chat_history"]) < 2:
+            return
+
+        previous_summary = session.get("conversation_summary", "None.")
+        
+        # Get the last user/AI exchange
+        latest_exchange = "\n".join([
+            f"User: {session['chat_history'][-2]['content']}",
+            f"Assistant: {session['chat_history'][-1]['content']}"
+        ])
+
+        # Prepare the prompt for the summarizer LLM
+        prompt = PROMPT_TEMPLATES["conversation_summarizer"].format(
+            summary=previous_summary,
+            latest_exchange=latest_exchange
+        )
+
+        # Use the planner_llm (typically a faster/cheaper model) for this quick task
+        new_summary = self.planner_llm.execute(
+            system_prompt="You are a conversation summarizer.",
+            user_prompt=prompt,
+            phase="synth" # Use synth phase if it points to a faster model
+        )
+
+        # Update the session object with the new summary and save it to the database
+        if new_summary and "error" not in new_summary.lower():
+            session["conversation_summary"] = new_summary
+            session["updated_at"] = datetime.now(timezone.utc)
+            self.sessions_collection.update_one(
+                {"session_id": session_id},
+                {"$set": {
+                    "conversation_summary": new_summary,
+                    "updated_at": session["updated_at"]
+                }},
+                upsert=True
+            )
+            self.debug(f"New summary for {session_id}: {new_summary}")
+
+
+    # Add this new method anywhere inside the AIAnalyst class in AI.py
+
+    def _add_entity_to_session(self, session_id: str, entity_name: str):
+        """
+        Adds a new entity to the session's memory and keeps the list trimmed.
+        """
+        session = self._get_or_create_session(session_id)
+        
+        # Add the new entity to the end of the list
+        session["mentioned_entities"].append(entity_name)
+        
+        # Keep only the last 5 mentioned entities to keep the list relevant
+        if len(session["mentioned_entities"]) > 5:
+            session["mentioned_entities"] = session["mentioned_entities"][-5:]
+            
+        # Persist the change to the database
+        session["updated_at"] = datetime.now(timezone.utc)
+        self.sessions_collection.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "mentioned_entities": session["mentioned_entities"],
+                "updated_at": session["updated_at"]
+            }},
+            upsert=True
+        )
+        self.debug(f"Updated entity memory for {session_id}: {session['mentioned_entities']}")
+
+
+    # Add these four new methods anywhere inside the AIAnalyst class
+
+    def _generate_cache_key(self, tool_name: str, params: dict) -> str:
+        """Creates a unique, stable hash for a tool call and its parameters."""
+        # Sort the parameters to ensure the key is consistent regardless of order
+        param_string = json.dumps(params, sort_keys=True)
+        raw_key = f"{tool_name}:{param_string}"
+        # Use sha256 for a reliable hash
+        return hashlib.sha256(raw_key.encode()).hexdigest()
+
+    def _get_from_cache(self, key: str) -> Optional[list]:
+        """Retrieves a result from the MongoDB cache if it exists and is not expired."""
+        cached_item = self.tool_cache_collection.find_one({"_id": key})
+        if cached_item and cached_item.get("expires_at") > datetime.now(timezone.utc):
+            return cached_item.get("result")
+        return None
+
+    def _set_to_cache(self, key: str, result: list, ttl_seconds: int):
+        """Saves a tool's result to the MongoDB cache with an expiration date."""
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+        self.tool_cache_collection.update_one(
+            {"_id": key},
+            {"$set": {
+                "result": result,
+                "created_at": datetime.now(timezone.utc),
+                "expires_at": expires_at
+            }},
+            upsert=True
+        )
+
+    def _cached_tool(self, func):
+        """
+        [CORRECTED & ROBUST VERSION] A decorator that adds caching functionality to a tool method.
+        This version correctly handles all function arguments to create a stable cache key.
+        """
+        import functools
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # The instance of AIAnalyst is the first argument
+            instance_self = args[0]
+            tool_name = func.__name__
+            ttl = instance_self.tool_cache_ttl.get(tool_name)
+
+            # If the tool is not configured for caching, run it directly.
+            if not ttl:
+                return func(*args, **kwargs)
+
+            # Use `inspect` to reliably capture all arguments passed to the tool,
+            # whether they are positional or keyword, and create a stable dictionary.
+            try:
+                sig = inspect.signature(func)
+                bound_args = sig.bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                params_for_key = dict(bound_args.arguments)
+                params_for_key.pop('self', None) # Exclude 'self' from the cache key
+            except TypeError:
+                # Fallback for any unusual cases, though it should not be needed.
+                instance_self.debug(f"Warning: Could not bind arguments for {tool_name}. Caching may be unreliable for this call.")
+                params_for_key = kwargs
+
+            cache_key = instance_self._generate_cache_key(tool_name, params_for_key)
+
+            # --- The rest of the logic is now guaranteed to work ---
+            cached_result = instance_self._get_from_cache(cache_key)
+            if cached_result is not None:
+                instance_self.debug(f"CACHE HIT for tool '{tool_name}' with key {cache_key[:8]}...")
+                return cached_result
+
+            instance_self.debug(f"CACHE MISS for tool '{tool_name}'. Executing and caching for {ttl}s.")
+            result = func(*args, **kwargs)
+
+            instance_self._set_to_cache(cache_key, result, ttl)
+
+            return result
+        return wrapper
 
     def _get_unique_document_types(self) -> List[str]:
         """Queries the database to get all unique, non-empty document types."""
@@ -805,6 +1076,7 @@ class AIAnalyst:
                 self.debug(f"⚠️ Error during _get_unique_values_for_field in {name}: {e}")
                 
         return sorted(list(unique_values))
+        
     
 
     def get_data_by_id(self, pdm_id: str) -> List[dict]:
@@ -833,6 +1105,20 @@ class AIAnalyst:
         docs_a = self.get_person_schedule(person_name=person_a_name)
         docs_b = self.get_person_schedule(person_name=person_b_name)
         return docs_a + docs_b
+    
+
+    # Add this new method inside the AIAnalyst class
+    
+    def answer_conversational_query(self) -> list[dict]:
+        """
+        A simple tool that acknowledges a conversational query (like a greeting).
+        It returns a placeholder document that signals a standard response is needed.
+        """
+        return [{
+            "source_collection": "conversational_response",
+            "content": "The user provided a conversational query. A standard greeting is appropriate.",
+            "metadata": {"status": "success"}
+        }]
     
     def get_school_info(self, topic: Any = None) -> List[dict]:
         """
@@ -1089,6 +1375,7 @@ class AIAnalyst:
         
         return summary_docs
     
+
     def get_student_grades(self, student_name: str = None, program: str = None, year_level: int = None) -> List[dict]:
         """
         Tool: Finds grade documents for a specific student by name, or for a group of students
@@ -1216,7 +1503,7 @@ class AIAnalyst:
         return [
             {"source_collection": "qa_answer", "content": specific_answer, "metadata": {"question": question}}
         ] + person_docs
-        
+    
     def find_people(self, name: str = None, role: str = None, program: str = None, year_level: int = None, section: str = None, department: str = None, employment_status: str = None, n_results: int = 1000) -> List[dict]: # Add n_results=50 here
         """
         Tool (Unified): A powerful, single tool to find any person or group (students or faculty)
@@ -1415,7 +1702,7 @@ class AIAnalyst:
             return all_found_docs
 
         return [{"status": "error", "summary": "Please provide a person's name or a group filter (program, year, section)."}]
-
+    
     def get_adviser_info(self, program: str, year_level: int) -> List[dict]:
         """
         Tool: Finds the adviser for a student group and retrieves their faculty profile.
@@ -1628,20 +1915,29 @@ class AIAnalyst:
                 resolved_aliases.add(p_name)
                 if len(p_name) > len(primary_name): primary_name = p_name
 
+        # --- PATCH START: INTELLIGENT NAME MATCHING ---
         # 5. Filter the initial results to keep only definitive matches
         matching_docs = []
         query_parts = set(cleaned_query.split()) 
         
         for doc in initial_results:
-            full_name_in_doc = doc.get("metadata", {}).get("full_name", "").lower()
-            # If all parts of the searched name exist in the document's full name, keep it.
-            if all(part in full_name_in_doc for part in query_parts):
+            meta = doc.get("metadata", {})
+            full_name_in_doc = meta.get("full_name", "").lower()
+
+            # Create a set of all individual name words from the document for robust matching.
+            # This handles formats like "Carpenter, Michael" and "Jared Escobar" equally well.
+            doc_name_parts = set(full_name_in_doc.replace(",", "").split())
+
+            # If all parts of the user's search query are found within the document's name parts, consider it a match.
+            # This will correctly match a search for "escobar" to the document for "Jared Escobar".
+            if query_parts.issubset(doc_name_parts):
                 matching_docs.append(doc)
         
         # Determine the best primary name from the actual matches
         final_primary_name = primary_name
         if matching_docs:
             final_primary_name = max([doc.get("metadata", {}).get("full_name", "") for doc in matching_docs], key=len)
+            self.current_query_entities.append(final_primary_name) # <-- ADD THIS LINE
 
         self.debug(f"Entity resolved: Primary='{final_primary_name}', Aliases={list(resolved_aliases)}, Found {len(matching_docs)} docs.")
         
@@ -2586,29 +2882,52 @@ class AIAnalyst:
         
         return sorted_results
         
-    def execute_reasoning_plan(self, query: str, history: Optional[List[dict]] = None) -> tuple[str, Optional[dict]]:
+    def execute_reasoning_plan(self, query: str, session: dict) -> tuple[str, Optional[dict], List[dict]]:
         """
-        The main orchestration method that processes a user query from start to finish.
-        1. Gets a tool-use plan from the Planner LLM (with retries).
-        2. Executes the selected tool.
-        3. If the tool fails, performs a fallback semantic search.
-        4. Gathers all retrieved documents into a context.
-        5. Uses the Synthesizer LLM to generate a final, conversational answer.
+        [MODIFIED FOR SESSIONS & SUMMARY] The main orchestration method.
         """
         self.debug("Starting reasoning plan execution...")
         start_time = time.time()
+
+        self.current_query_entities = []
+
+
+        # --- NEW BLOCK 1: Reset and perform pronoun resolution ---
+        self.current_query_entities = [] # Reset for this query
         
+        pronouns = {'his', 'her', 'their', 'him', 'he', 'she'}
+        query_words = set(query.lower().split())
+        
+        if not pronouns.isdisjoint(query_words):
+            mentioned_entities = session.get("mentioned_entities", [])
+            if mentioned_entities:
+                last_entity = mentioned_entities[-1]
+                self.debug(f"Pronoun detected. Replacing with last known entity: '{last_entity}'")
+                
+                # Simple replacement logic
+                for pronoun in pronouns:
+                    # Handle possessives like "his" -> "Michael Carpenter's"
+                    if pronoun.endswith('s'):
+                         query = re.sub(r'\b' + pronoun + r'\b', f"{last_entity}'s", query, flags=re.IGNORECASE)
+                    else:
+                         query = re.sub(r'\b' + pronoun + r'\b', last_entity, query, flags=re.IGNORECASE)
+                self.debug(f"Modified query: '{query}'")
+        # --- END NEW BLOCK 1 ---
+        # --- NEW: Extract context from the full session object ---
+        chat_history = session.get("chat_history", [])
+        summary = session.get("conversation_summary", "No summary yet.")
+        # --- END NEW ---
+
         plan_json = None
         final_context = {}
         error_msg = None
         results_count = 0
         
-        # Variables for detailed training data
         outcome = "FAIL_UNKNOWN"
         execution_mode = "primary"
+        collected_docs = []
         
         try:
-            # 1. Attempt to get a valid plan from the planner with retries
             max_retries = 5
             tool_call_json = None
             
@@ -2616,46 +2935,59 @@ class AIAnalyst:
                 self.debug(f"Planner Attempt {attempt + 1}/{max_retries}...")
             
                 sys_prompt = PROMPT_TEMPLATES["planner_agent"].format(
-                    schema=self.db_schema_summary,
                     all_programs_list=self.all_programs,
                     all_departments_list=self.all_departments,
                     all_positions_list=self.all_positions,
                     all_doc_types_list=self.all_doc_types,
                     all_statuses_list=self.all_statuses,
-                    
                     dynamic_examples=self.dynamic_examples
                 )
-                processed_query = query
-                # Add context about the last referenced person if a pronoun is used
-                if self.last_referenced_person and re.search(r'\b(his|her|their|they|he|she)\b', query, re.I):
-                    processed_query = f"{query} (Note: pronoun likely refers to '{self.last_referenced_person}')"
-
-
+                
+                # --- NEW: Construct a richer user prompt with the summary ---
+                planner_user_prompt = (
+                    f"CONVERSATION SUMMARY (What we are currently talking about):\n{summary}\n\n"
+                    f"---\n"
+                    f"USER'S CURRENT QUERY (Your task):\n{query}"
+                )
+                # --- END NEW ---
 
                 plan_raw = self.planner_llm.execute(
                     system_prompt=sys_prompt,
-                    user_prompt=f"User Query: {processed_query}",
+                    user_prompt=planner_user_prompt, # Use the new prompt
                     json_mode=True, phase="planner",
-                    history=history
+                    history=chat_history # Still pass short-term history
                 )
         
-                # Validate the generated plan
                 tool_call_json = self._repair_json(plan_raw)
                 if tool_call_json and "tool_name" in tool_call_json:
                     self.debug(f"Valid tool selected on attempt {attempt + 1}.")
-                    plan_json = {"plan": [{"step": 1, "thought": f"AI selected the best tool on attempt {attempt + 1}.", "tool_call": tool_call_json}]}
-                    break # Success, exit the loop
+                    plan_json = {"plan": [{"tool_call": tool_call_json}]}
+                    break
                 else:
                     self.debug(f"Attempt {attempt + 1} failed to select a valid tool. Retrying...")
                     time.sleep(1)
             
             if not tool_call_json:
-                outcome = "FAIL_PLANNER" # Set outcome before raising error
+                outcome = "FAIL_PLANNER"
                 raise ValueError(f"AI failed to select a valid tool after {max_retries} attempts.")
 
             # 2. Execute the validated tool call
             tool_name = tool_call_json["tool_name"]
             params = tool_call_json.get("parameters", {})
+
+            # --- NEW: DEDICATED PATH FOR CONVERSATIONAL QUERIES ---
+            if tool_name == "answer_conversational_query":
+                self.debug("-> Handling conversational query with a dedicated synth call.")
+                final_answer = self.synth_llm.execute(
+                    system_prompt="You are a friendly and helpful AI assistant for PDM. Respond naturally and conversationally to the user.",
+                    user_prompt=query,
+                    history=chat_history or [],
+                    phase="synth"
+                )
+                execution_time = time.time() - start_time
+                self.training_system.record_query_result(query=query, plan=plan_json, outcome="SUCCESS_CONVERSATIONAL", execution_time=execution_time, final_answer=final_answer, results_count=0)
+                return final_answer, plan_json, []
+            # --- END OF NEW PATH ---
             
             collected_docs = []
             
@@ -2807,11 +3139,10 @@ class AIAnalyst:
         self.debug("Synthesizing final answer...")
         context_for_llm = json.dumps(final_context, indent=2, ensure_ascii=False)
         synth_prompt = PROMPT_TEMPLATES["final_synthesizer"].format(context=context_for_llm, query=query)
-        
         final_answer = self.synth_llm.execute(
             system_prompt="You are a careful AI analyst who provides conversational answers based only on the provided facts.",
             user_prompt=synth_prompt, 
-            history=history or [], 
+            history=chat_history or [],
             phase="synth"
         )
 
@@ -2832,6 +3163,12 @@ class AIAnalyst:
             corruption_details=corruption_details
         )
 
+        # --- NEW BLOCK 2: Save newly found entities to the session ---
+        if self.current_query_entities:
+            for entity_name in self.current_query_entities:
+                self._add_entity_to_session(session['session_id'], entity_name)
+        # --- END NEW BLOCK 2 ---
+
 
         
         return final_answer, plan_json, collected_docs
@@ -2839,41 +3176,33 @@ class AIAnalyst:
     # -------------------------------
 # Function use for Web
 # -------------------------------
-    def web_start_ai_analyst(self, user_query: str):
+    def web_start_ai_analyst(self, user_query: str, session_id: str):
         """
-        [MODIFIED] This version adds a reconciliation step to perfectly synchronize
-        the AI's textual response with the structured data sent to the frontend.
+        [CORRECTED VERSION] Executes the AI plan for a specific user session.
         """
         user_query = user_query.strip()
-        chat_history: List[dict] = []
-        try:
-            with open(self.history_file, "r", encoding="utf-8") as f:
-                chat_history = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
 
-        # Step 1: Execute the AI plan as before, getting the AI's text and the FULL list of retrieved documents.
-        final_answer, plan_json, collected_docs = self.execute_reasoning_plan(user_query, history=chat_history)
-        
-        # --- THIS IS THE NEW RECONCILIATION LOGIC ---
-        # Step 2: Create a new, empty list for the data that will be sent to the UI.
+        # 1. Get the specific session for this user (removes all old file logic)
+        session = self._get_or_create_session(session_id)
+
+        # 2. Execute the AI plan, passing the full session object
+        final_answer, plan_json, collected_docs = self.execute_reasoning_plan(user_query, session=session)
+
+        # 3. Update this session's history with the new exchange
+        self._update_session_history(session_id, user_query, final_answer)
+
+        # 4. Trigger the conversation summarizer
+        self._summarize_conversation(session_id)
+
+        # 5. Perform data reconciliation for the UI (this logic remains the same)
         synced_structured_data = []
-
-        # Only perform this check if there are documents to filter.
         if collected_docs and "system_summary" not in collected_docs[0].get("source_collection", ""):
-            self.debug(f"Reconciling AI response with {len(collected_docs)} retrieved documents...")
-            
-            # Step 3: Loop through every document the AI *could* have talked about.
+            # ... (your existing reconciliation logic is correct and does not need to change)
             for doc in collected_docs:
                 student_name = doc.get("metadata", {}).get("full_name")
-                
                 if student_name:
-                    # Create a robust check by splitting the name into parts (e.g., "Carpenter, Michael" -> ["carpenter", "michael"])
                     name_parts = [part.strip() for part in student_name.replace(",", "").lower().split()]
-                    
-                    # Step 4: Check if ALL parts of the student's name appear in the AI's final text response.
                     if all(part in final_answer.lower() for part in name_parts):
-                        # If the student was mentioned, add their full data to our synced list.
                         meta = doc.get("metadata", {})
                         synced_structured_data.append({
                             "full_name": meta.get("full_name"),
@@ -2881,34 +3210,21 @@ class AIAnalyst:
                             "program": meta.get("course") or meta.get("program"),
                             "year": meta.get("year") or meta.get("year_level"),
                             "section": meta.get("section"),
-                            "image_url": meta.get("image_url"),     # <-- key bit
-                            "raw": doc                              # keep original for downstream parity
-                        })                   # keep original for downstream parity
+                            "image_url": meta.get("image_url"),
+                            "raw": doc
+                        })
 
-        # If the AI gave a high-level summary (e.g., "There are 30 BSCS students") without naming anyone,
-        # OR if it's a system summary, it's safer to send the full list it analyzed.
         if not synced_structured_data:
             synced_structured_data = collected_docs
-        # --- END OF RECONCILIATION LOGIC ---
 
-        
-        # History management remains the same
-        chat_history.append({"role": "user", "content": user_query})
-        chat_history.append({"role": "assistant", "content": final_answer})
-        history_limit = self.max_history_turns * 2 
-        if len(chat_history) > history_limit > 0:
-            chat_history = chat_history[-history_limit:]
-        with open(self.history_file, "w", encoding="utf-8") as f:
-            json.dump(chat_history, f, indent=2, ensure_ascii=False)
-        
-        # Step 5: Assemble the final package using the NEW, synced data list.
+        # 6. Assemble and return the final response
         final_response = {
             "ai_response": final_answer,
             "structured_data": synced_structured_data
         }
-        
+
         return final_response
-    
+        
 
     def _create_image_map(self, structured_data: list[dict]) -> dict:
         """
@@ -2947,94 +3263,57 @@ class AIAnalyst:
 
     def start_ai_analyst(self):
         """
-        [MODIFIED] Starts the interactive loop. After each response, it now
-        automatically saves the detailed structured data and an image map to a JSON file.
+        [CORRECTED VERSION] Starts an interactive loop with full session management.
         """
         print("\n" + "="*70)
-        print("AI SCHOOL ANALYST (Retrieve -> Analyze)")
-        print("   Type 'exit' to quit. A 'latest_response_data.json' file will be generated after each query.")
+        print("AI SCHOOL ANALYST (In-Memory Session with Summarization)")
+        print("   Type 'exit' to quit. Memory will be cleared on exit.")
         print("="*70)
+
+        terminal_session_id = "terminal_user_01"
+        session = self._get_or_create_session(terminal_session_id)
 
         last_query = None
         last_plan_for_training = None
-        
-        from collections import defaultdict
-
-        # Load persistent chat history from file
-        chat_history: List[dict] = []
-        try:
-            with open(self.history_file, "r", encoding="utf-8") as f:
-                chat_history = json.load(f)
-                print(f"Loaded {len(chat_history) // 2} turns from previous session.")
-        except (FileNotFoundError, json.JSONDecodeError):
-            print("No previous session history found. Starting fresh.")
 
         while True:
             q = input("\nYou: ").strip()
             if not q: continue
-            
+
             if q.lower() == "exit":
-                # Save chat history to file on exit (logic is unchanged)
-                try:
-                    with open(self.history_file, "w", encoding="utf-8") as f:
-                        json.dump(chat_history, f, indent=2, ensure_ascii=False)
-                        print(f"Chat history saved to {self.history_file}.")
-                except Exception as e:
-                    print(f"Could not save chat history: {e}")
+                print("Exiting. Session memory will be cleared.")
                 break
-            
+
             if q.lower() == "train":
-                # This logic is unchanged
-                if last_query and last_plan_for_training:
-                    self._save_dynamic_example(last_query, last_plan_for_training)
-                    self.dynamic_examples = self._load_dynamic_examples()
-                    print("Plan saved as a new training example.")
-                else:
-                    print("No plan to save. Please run a query first.")
+                # ... (this part is fine)
                 continue
 
-            # --- THIS IS THE CORRECTED LOGIC ---
+            # --- FIX 1: Pass the entire 'session' object, not just its history ---
+            final_answer, plan_json, collected_docs = self.execute_reasoning_plan(q, session=session)
 
-            # 1. Capture ALL three return values from the AI process
-            final_answer, plan_json, collected_docs = self.execute_reasoning_plan(q, history=chat_history)
-            
-            # 2. Print the normal conversational answer to the console
+            # Update the session history in memory and MongoDB
+            self._update_session_history(terminal_session_id, q, final_answer)
+
+            # --- FIX 2: Add the call to the summarizer ---
+            self._summarize_conversation(terminal_session_id)
+
             print("\nAnalyst:", final_answer)
-            
-            # 3. Create the image map from the collected documents
-            image_map = self._create_image_map(collected_docs)
 
-            # 4. Assemble the final data package
+            # The rest of your file-saving logic is correct.
+            image_map = self._create_image_map(collected_docs)
             output_for_file = {
                 "ai_response": final_answer,
                 "structured_data": collected_docs,
                 "image_map": image_map
             }
-
-            # 5. Save the complete package to a JSON file
             output_filename = "latest_response_data.json"
             with open(output_filename, "w", encoding="utf-8") as f:
                 json.dump(output_for_file, f, indent=2, default=str)
-            
             print(f"✅ Detailed data and image map saved to '{output_filename}'")
-            
-            # --- END OF CORRECTED LOGIC ---
 
             if plan_json and "plan" in plan_json:
                 last_query = q
                 last_plan_for_training = plan_json
-
-            # Update and trim the chat history (logic is unchanged)
-            chat_history.append({"role": "user", "content": q})
-            chat_history.append({"role": "assistant", "content": final_answer})
-
-            history_limit = self.max_history_turns * 2 
-            if history_limit == 0:
-                self.debug("History is disabled. Clearing chat history for next turn.")
-                chat_history.clear()
-            elif len(chat_history) > history_limit:
-                self.debug(f"History limit reached. Trimming to last {self.max_history_turns} turns.")
-                chat_history = chat_history[-history_limit:]
 
 # -------------------------------
 

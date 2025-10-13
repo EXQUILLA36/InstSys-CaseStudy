@@ -7651,6 +7651,1206 @@
       "final_answer": "Here is the complete list of all BSCS 2nd year students:\n\nFound a total of 30 students, organized as follows:\n\n## BSCS - Year 2 - Section A (30 students)\n\n**1. Ali, Charles**\n- **Student ID:** PDM-2025-000049\n- **Department:** CCS\n- **Contact:** 9778669996\n- **Guardian:** Jessica Woodard\n- **Guardian Contact:**\n\n**2. Barnes, Mark**\n- **Student ID:** PDM-2025-000035\n- **Department:** CCS\n- **Contact:** 9295486387\n- **Guardian:** Matthew Colon\n- **Guardian Contact:**\n\n**3. Bridges, Mary**\n- **Student ID:** PDM-2025-000045\n- **Department:** CCS\n- **Contact:** 9707570785\n- **Guardian:** Robert Lopez\n- **Guardian Contact:**\n\n**4. Bright, Ryan**\n- **Student ID:** PDM-2025-000040\n- **Department:** CCS\n- **Contact:** 9750076283\n- **Guardian:** Matthew Chapman\n- **Guardian Contact:**\n\n**5. Brooks, Christina**\n- **Student ID:** PDM-2025-000054\n- **Department:** CCS\n- **Contact:** 9161784194\n- **Guardian:** Susan Hernandez\n- **Guardian Contact:**\n\n**6. Burton, Joe**\n- **Student ID:** PDM-2025-000051\n- **Department:** CCS\n- **Contact:** 9766532627\n- **Guardian:** Patrick Kirk\n- **Guardian Contact:**\n\n**7. Carpenter, Michael**\n- **Student ID:** PDM-2025-000031\n- **Department:** CCS\n- **Contact:** 9211796807\n- **Guardian:** Victor Martin\n- **Guardian Contact:**\n\n**8. Castro, Mary**\n- **Student ID:** PDM-2025-000060\n- **Department:** CCS\n- **Contact:** 9571735838\n- **Guardian:** George Howard\n- **Guardian Contact:**\n\n**9. Clarke, Jacob**\n- **Student ID:** PDM-2025-000042\n- **Department:** CCS\n- **Contact:** 9715968207\n- **Guardian:** Terry Moore\n- **Guardian Contact:**\n\n**10. Cox, Susan**\n- **Student ID:** PDM-2025-000047\n- **Department:** CCS\n- **Contact:** 9881949305\n- **Guardian:** Scott French\n- **Guardian Contact:**\n\n**11. Gray, Mary**\n- **Student ID:** PDM-2025-000050\n- **Department:** CCS\n- **Contact:** 9285572911\n- **Guardian:** Alicia Cobb\n- **Guardian Contact:**\n\n**12. Hodge, Karen**\n- **Student ID:** PDM-2025-000043\n- **Department:** CCS\n- **Contact:** 9660074696\n- **Guardian:** Sarah Clark\n- **Guardian Contact:**\n\n**13. Hudson, Samantha**\n- **Student ID:** PDM-2025-000046\n- **Department:** CCS\n- **Contact:** 9246072598\n- **Guardian:** Gail Boyer\n- **Guardian Contact:**\n\n**14. Martinez, Maria**\n- **Student ID:** PDM-2025-000033\n- **Department:** CCS\n- **Contact:** 9806732623\n- **Guardian:** Abigail Lawrence\n- **Guardian Contact:**\n\n**15. Miles, David**\n- **Student ID:** PDM-2025-000059\n- **Department:** CCS\n- **Contact:** 9650327898\n- **Guardian:** Debbie Burton\n- **Guardian Contact:**\n\n**16. Miles, Karen**\n- **Student ID:** PDM-2025-000044\n- **Department:** CCS\n- **Contact:** 9551470667\n- **Guardian:** Teresa Jarvis\n- **Guardian Contact:**\n\n**17. Miller, Logan**\n- **Student ID:** PDM-2025-000034\n- **Department:** CCS\n- **Contact:** 9991725464\n- **Guardian:** Terry Schmidt\n- **Guardian Contact:**\n\n**18. Ochoa, Jaime**\n- **Student ID:** PDM-2025-000038\n- **Department:** CCS\n- **Contact:** 9829905736\n- **Guardian:** Rebecca Butler\n- **Guardian Contact:**\n\n**19. Pace, Lee**\n- **Student ID:** PDM-2025-000037\n- **Department:** CCS\n- **Contact:** 9948747224\n- **Guardian:** Jaime Fields\n- **Guardian Contact:**\n\n**20. Palmer, Brian**\n- **Student ID:** PDM-2025-000058\n- **Department:** CCS\n- **Contact:** 9589836425\n- **Guardian:** Kathy Hunt\n- **Guardian Contact:**\n\n**21. Richard, Jackie**\n- **Student ID:** PDM-2025-000055\n- **Department:** CCS\n- **Contact:** 9592971387\n- **Guardian:** Kristina Garner\n- **Guardian Contact:**\n\n**22. Roberts, Steven**\n- **Student ID:** PDM-2025-000057\n- **Department:** CCS\n- **Contact:** 9619121737\n- **Guardian:** Craig Callahan\n- **Guardian Contact:**\n\n**23. Ruiz, Erin**\n- **Student ID:** PDM-2025-000032\n- **Department:** CCS\n- **Contact:** 9263602462\n- **Guardian:** Crystal Johnson\n- **Guardian Contact:**\n\n**24. Stone, Rebecca**\n- **Student ID:** PDM-2025-000036\n- **Department:** CCS\n- **Contact:** 9524683884\n- **Guardian:** Kimberly Rodriguez\n- **Guardian Contact:**\n\n**25. Sutton, Christopher**\n- **Student ID:** PDM-2025-000053\n- **Department:** CCS\n- **Contact:** 9064873166\n- **Guardian:** Robert Smith\n- **Guardian Contact:**\n\n**26. Valdez, Elizabeth**\n- **Student ID:** PDM-2025-000048\n- **Department:** CCS\n- **Contact:** 9393149877\n- **Guardian:** Sean Berry\n- **Guardian Contact:**\n\n**27. Walker, John**\n- **Student ID:** PDM-2025-000052\n- **Department:** CCS\n- **Contact:** 9192445008\n- **Guardian:** Wanda Roberts\n- **Guardian Contact:**\n\n**28. Walker, Megan**\n- **Student ID:** PDM-2025-000056\n- **Department:** CCS\n- **Contact:** 9655792439\n- **Guardian:** Marcus Stafford\n- **Guardian Contact:**\n\n**29. White, Rhonda**\n- **Student ID:** PDM-2025-000039\n- **Department:** CCS\n- **Contact:** 9486019579\n- **Guardian:** Heather Davis\n- **Guardian Contact:**\n\n**30. Williams, Chloe**\n- **Student ID:** PDM-2025-000041\n- **Department:** CCS\n- **Contact:** 9945427450\n- **Guardian:** Anthony Carter\n- **Guardian Contact:**\n\n- [system_summary]",
       "error_message": null,
       "corruption_details": null
+    },
+    {
+      "query": "who is franklin visto",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "franklin visto"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EMPTY",
+      "analyst_mode": "online",
+      "execution_mode": "fallback",
+      "results_count": 0,
+      "execution_time": 2.9477834701538086,
+      "timestamp": "2025-10-13T18:13:42.076951",
+      "final_answer": "I could not find any information about Franklin Visto in the provided documents.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is rebecca",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.7502691745758057,
+      "timestamp": "2025-10-13T18:13:57.063097",
+      "final_answer": "Rebecca Stone is a second-year student in the BSCS program at PDM.\n\n- She is enrolled in Section A of the BSCS program.\n- Her student ID is PDM-2025-000036.\n- She is part of the CCS department.\n- Her contact number is 9524683884.\n- Her guardian is Kimberly Rodriguez.\n\n[students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is rebecca",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.6352107524871826,
+      "timestamp": "2025-10-13T18:17:40.778143",
+      "final_answer": "Rebecca Stone is a second-year student in the BSCS program at PDM, specifically in Section A of the Computer and Communication Sciences (CCS) department.\n\n- She is enrolled under the student ID PDM-2025-000036.\n- Her contact number is 9524683884.\n- Her guardian is Kimberly Rodriguez.\n- Her profile completion is at 87.5%.\n- [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "& C:/Users/BJ/AppData/Local/Microsoft/WindowsApps/python3.11.exe \"d:/Desktop HDD/INTSYS/InstSys-CaseStudy-AI/backend/utils/run_ai.py\"",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_database_summary",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 4.560549259185791,
+      "timestamp": "2025-10-13T18:29:27.250629",
+      "final_answer": "The database contains 1 collection named 'students' with 150 documents. Key information includes completion percentage, contact number, course, creation date, department, first name, and full name.\n\n- The 'students' collection has 150 documents.\n- Key fields in the 'students' collection include completion percentage, contact number, course, creation date, department, first name, and full name.\n- [system_summary]\n- [collection_info]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "student with last name Escobar",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "last_name": "Escobar"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EMPTY",
+      "analyst_mode": "online",
+      "execution_mode": "fallback",
+      "results_count": 0,
+      "execution_time": 2.7388041019439697,
+      "timestamp": "2025-10-13T18:29:40.796083",
+      "final_answer": "I couldn't find any students with the last name Escobar in the provided documents.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is escobar",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "escobar"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.2957699298858643,
+      "timestamp": "2025-10-13T18:29:47.793620",
+      "final_answer": "Jared Escobar is a third-year student in the BSHM program, Section B of the CHTM department.\n\n- He is enrolled under the student ID PDM-2025-000651.\n- His contact number is 9153564607.\n- His guardian is Mrs. Christina Moore.\n- His profile completion is at 50.0%.\n- [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is escobar",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "escobar"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.660170793533325,
+      "timestamp": "2025-10-13T18:33:30.532114",
+      "final_answer": "Jared Escobar is a third-year student in the BSHM program, Section B of the CHTM department.\n\n- He is enrolled under the student ID PDM-2025-000651.\n- His contact number is 9153564607.\n- His guardian is Mrs. Christina Moore.\n- His profile completion is at 50.0%.\n- [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is jared",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "jared"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.1937832832336426,
+      "timestamp": "2025-10-13T18:33:34.882171",
+      "final_answer": "Jared Escobar is a third-year student in the BSHM program, Section B of the CHTM department.\n\n- He is enrolled under the student ID PDM-2025-000651.\n- His contact number is 9153564607.\n- His guardian is Mrs. Christina Moore.\n- His profile completion is at 50.0%.\n- [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is escobar jared",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "escobar jared"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.2405917644500732,
+      "timestamp": "2025-10-13T18:33:48.369091",
+      "final_answer": "Jared Escobar is a third-year student in the BSHM program, Section B of the CHTM department.\n\n- He is enrolled under the student ID PDM-2025-000651.\n- His contact number is 9153564607.\n- His guardian is Mrs. Christina Moore.\n- His profile completion is at 50.0%.\n- [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is the student with last name escobar",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "role": "student",
+                "last_name": "escobar"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.4916932582855225,
+      "timestamp": "2025-10-13T18:33:58.828959",
+      "final_answer": "Jared Escobar is a third-year student in the BSHM program, Section B of the CHTM department.\n\n- He is enrolled under the student ID PDM-2025-000651.\n- His contact number is 9153564607.\n- His guardian is Mrs. Christina Moore.\n- [system_summary]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is escobar",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "last_name": "Escobar"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EMPTY",
+      "analyst_mode": "online",
+      "execution_mode": "fallback",
+      "results_count": 0,
+      "execution_time": 1.9961605072021484,
+      "timestamp": "2025-10-13T18:35:47.638997",
+      "final_answer": "I couldn't find any information about Escobar in the provided documents.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is jared",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "jared"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.5652823448181152,
+      "timestamp": "2025-10-13T18:35:56.033324",
+      "final_answer": "Jared Escobar is a third-year student in the BSHM program, Section B of the CHTM department.\n\n- He is enrolled under the student ID PDM-2025-000651.\n- His contact number is 9153564607.\n- His guardian is Mrs. Christina Moore.\n- [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is escobar",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "escobar"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.1088855266571045,
+      "timestamp": "2025-10-13T18:41:24.008950",
+      "final_answer": "I couldn't find any information about Escobar in the provided documents.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "student with last name Escobar",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "name": "Escobar"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.8252594470977783,
+      "timestamp": "2025-10-13T18:41:40.574285",
+      "final_answer": "Jared Escobar is a student with the last name Escobar.\n\n- He is enrolled in the BSHM program, Section B of the CHTM department.\n- His student ID is PDM-2025-000651.\n- His contact number is 9153564607.\n- His guardian is Mrs. Christina Moore.\n- [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hey",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_database_summary",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.60709547996521,
+      "timestamp": "2025-10-13T19:10:09.779383",
+      "final_answer": "Hello! I'm here to help you with information about PDM or Pambayang Dalubhasaan ng Marilao. I can provide details about students, faculty, schedules, and academic programs. What specific information are you looking for?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "how are you",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_database_summary",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.2165112495422363,
+      "timestamp": "2025-10-13T19:10:32.603326",
+      "final_answer": "I'm functioning well, thank you for asking. I have access to information about students, including their completion percentages, contact numbers, courses, and more. Here are the details:\n\n- The database contains 150 student records.\n- Key information available includes completion percentages, contact numbers, courses, and full names. [collection_info]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "exi",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "name": "exi"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EMPTY",
+      "analyst_mode": "online",
+      "execution_mode": "fallback",
+      "results_count": 0,
+      "execution_time": 2.1314029693603516,
+      "timestamp": "2025-10-13T19:30:50.541909",
+      "final_answer": "I couldn't find any relevant information about \"exi\" in the provided documents.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hey",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_database_summary",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.299926280975342,
+      "timestamp": "2025-10-13T19:31:15.862397",
+      "final_answer": "Hello! I'm an AI Data Analyst for PDM or Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. What would you like to know? [system_summary]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hey",
+      "plan": {
+        "plan": [
+          {
+            "step": 1,
+            "thought": "AI selected the best tool on attempt 1.",
+            "tool_call": {
+              "tool_name": "get_database_summary",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.518850803375244,
+      "timestamp": "2025-10-13T19:36:26.497955",
+      "final_answer": "Hello! I'm an AI Data Analyst for PDM or Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. What would you like to know? [system_summary]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_database_summary",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.279468297958374,
+      "timestamp": "2025-10-13T19:41:55.722078",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is rebecca",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.746290922164917,
+      "timestamp": "2025-10-13T19:43:01.431074",
+      "final_answer": "Rebecca Stone is a second-year student in the Bachelor of Science in Computer Science (BSCS) program, Section A, in the College of Computer Studies (CCS).\n\n- She has a completion percentage of 87.5%.\n- Her contact number is 9524683884.\n- Her student ID is PDM-2025-000036.\n- Her guardian is Kimberly Rodriguez.\n- She was created on October 12, 2025, at 09:25:32.404000.\n- Her profile was last updated on October 12, 2025, at 09:25:53.394000. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hey",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.3964173793792725,
+      "timestamp": "2025-10-13T19:52:31.280341",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 3.2476274967193604,
+      "timestamp": "2025-10-13T19:57:22.137851",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "kamusta ka",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "kamusta ka"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.4747281074523926,
+      "timestamp": "2025-10-13T19:57:37.062832",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user provided a conversational query. A standard greeting is appropriate. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "what time is it right now",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "what time is it right now"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.4067962169647217,
+      "timestamp": "2025-10-13T19:57:55.690928",
+      "final_answer": "I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user asked about the current time, but the Factual Documents do not contain information about the current time. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.292290449142456,
+      "timestamp": "2025-10-13T20:02:03.429607",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user provided a conversational query. A standard greeting is appropriate. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who are you?",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "who are you?"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.5720181465148926,
+      "timestamp": "2025-10-13T20:02:12.454263",
+      "final_answer": "I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user provided a conversational query. A standard greeting is appropriate. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "my name is earl",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "earl"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EMPTY",
+      "analyst_mode": "online",
+      "execution_mode": "fallback",
+      "results_count": 0,
+      "execution_time": 2.2217795848846436,
+      "timestamp": "2025-10-13T20:02:51.105282",
+      "final_answer": "I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user provided a conversational query. A standard greeting is appropriate. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hello"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.495375394821167,
+      "timestamp": "2025-10-13T20:03:03.970023",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user provided a conversational query. A standard greeting is appropriate. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 3.424485921859741,
+      "timestamp": "2025-10-13T20:06:08.448890",
+      "final_answer": "I'm sorry, but I'm currently experiencing a technical issue. I'm unable to assist with your request at the moment. Please try again later.",
+      "error_message": "TrainingSystem.record_query_result() missing 1 required positional argument: 'results_count'",
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_database_summary",
+              "parameters": {}
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.420376777648926,
+      "timestamp": "2025-10-13T20:09:14.192365",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user provided a conversational query. A standard greeting is appropriate. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hello"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 4.311095952987671,
+      "timestamp": "2025-10-13T20:10:21.796661",
+      "final_answer": "I'm sorry, but I couldn't find the information you're looking for. It seems there was a technical problem while retrieving the data. Please try again later or contact the school's administration for assistance.",
+      "error_message": "TrainingSystem.record_query_result() missing 1 required positional argument: 'results_count'",
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hello"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 3.238119125366211,
+      "timestamp": "2025-10-13T20:12:38.064152",
+      "final_answer": "Hello! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?\n\n- The user provided a conversational query. A standard greeting is appropriate. [conversational_response]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "how are you",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "how are you"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.0677249431610107,
+      "timestamp": "2025-10-13T20:13:02.846146",
+      "final_answer": "I'm just a bunch of code, but I'm here and ready to help you with any information you need about Pambayang Dalubhasaan ng Marilao. How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hey",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hey"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.5544400215148926,
+      "timestamp": "2025-10-13T20:13:17.964539",
+      "final_answer": "Hey there! I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who are you",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "who are you"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.2700319290161133,
+      "timestamp": "2025-10-13T20:13:29.377233",
+      "final_answer": "I'm an AI Data Analyst for Pambayang Dalubhasaan ng Marilao. I can help you find information about students, faculty, schedules, and academic programs. For example, I can tell you about the students' completion percentages, contact numbers, courses, and departments. How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "thanks",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "thanks"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.8000199794769287,
+      "timestamp": "2025-10-13T20:13:39.250636",
+      "final_answer": "You're welcome! If you have any questions or need assistance, feel free to ask. I'm here to help.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is your creator",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "who is your creator"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.061549425125122,
+      "timestamp": "2025-10-13T20:13:52.297438",
+      "final_answer": "I was created by Mistral AI.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "are you intelligent",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "are you intelligent"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.109785556793213,
+      "timestamp": "2025-10-13T20:14:10.274131",
+      "final_answer": "I'm designed to be helpful, creative, and engaging. I can provide information, answer questions, and even generate text based on the input I receive. While I don't have consciousness or personal experiences, I'm constantly learning and improving to better assist you.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is rebecca",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.5554308891296387,
+      "timestamp": "2025-10-13T20:14:34.064081",
+      "final_answer": "Rebecca Stone is a second-year student in the Bachelor of Science in Computer Science (BSCS) program, Section A, in the College of Computer Studies (CCS).\n\n* Rebecca Stone is enrolled in the BSCS program, Year 2, Section A. [students]\n* She is part of the College of Computer Studies (CCS). [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "whawhat is Stone, Rebecca course",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Rebecca Stone"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 3.36159610748291,
+      "timestamp": "2025-10-13T20:14:42.206821",
+      "final_answer": "Rebecca Stone is enrolled in the Bachelor of Science in Computer Science (BSCS) program.\n\n* Rebecca Stone is enrolled in the BSCS program, Year 2, Section A. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "all the bscs 3rd year students",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "program": "BSCS",
+                "year_level": 3,
+                "role": "student"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EMPTY",
+      "analyst_mode": "online",
+      "execution_mode": "fallback",
+      "results_count": 0,
+      "execution_time": 2.8718926906585693,
+      "timestamp": "2025-10-13T20:24:18.979357",
+      "final_answer": "I could not find any information about BSCS 3rd year students in the provided documents.",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "all the bscs 2nd year students",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "program": "BSCS",
+                "year_level": 2,
+                "role": "student",
+                "n_results": 1000
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 9.812862873077393,
+      "timestamp": "2025-10-13T20:24:45.865849",
+      "final_answer": "Here is the complete list of all BSCS 2nd year students:\n\nFound a total of 30 students, organized as follows:\n\n## BSCS - Year 2 - Section A (30 students)\n\n**1. Ali, Charles**\n- **Student ID:** PDM-2025-000049\n- **Department:** CCS\n- **Contact:** 9778669996\n- **Guardian:** Jessica Woodard\n- **Guardian Contact:**\n\n**2. Barnes, Mark**\n- **Student ID:** PDM-2025-000035\n- **Department:** CCS\n- **Contact:** 9295486387\n- **Guardian:** Matthew Colon\n- **Guardian Contact:**\n\n**3. Bridges, Mary**\n- **Student ID:** PDM-2025-000045\n- **Department:** CCS\n- **Contact:** 9707570785\n- **Guardian:** Robert Lopez\n- **Guardian Contact:**\n\n**4. Bright, Ryan**\n- **Student ID:** PDM-2025-000040\n- **Department:** CCS\n- **Contact:** 9750076283\n- **Guardian:** Matthew Chapman\n- **Guardian Contact:**\n\n**5. Brooks, Christina**\n- **Student ID:** PDM-2025-000054\n- **Department:** CCS\n- **Contact:** 9161784194\n- **Guardian:** Susan Hernandez\n- **Guardian Contact:**\n\n**6. Burton, Joe**\n- **Student ID:** PDM-2025-000051\n- **Department:** CCS\n- **Contact:** 9766532627\n- **Guardian:** Patrick Kirk\n- **Guardian Contact:**\n\n**7. Carpenter, Michael**\n- **Student ID:** PDM-2025-000031\n- **Department:** CCS\n- **Contact:** 9211796807\n- **Guardian:** Victor Martin\n- **Guardian Contact:**\n\n**8. Castro, Mary**\n- **Student ID:** PDM-2025-000060\n- **Department:** CCS\n- **Contact:** 9571735838\n- **Guardian:** George Howard\n- **Guardian Contact:**\n\n**9. Clarke, Jacob**\n- **Student ID:** PDM-2025-000042\n- **Department:** CCS\n- **Contact:** 9715968207\n- **Guardian:** Terry Moore\n- **Guardian Contact:**\n\n**10. Cox, Susan**\n- **Student ID:** PDM-2025-000047\n- **Department:** CCS\n- **Contact:** 9881949305\n- **Guardian:** Scott French\n- **Guardian Contact:**\n\n**11. Gray, Mary**\n- **Student ID:** PDM-2025-000050\n- **Department:** CCS\n- **Contact:** 9285572911\n- **Guardian:** Alicia Cobb\n- **Guardian Contact:**\n\n**12. Hodge, Karen**\n- **Student ID:** PDM-2025-000043\n- **Department:** CCS\n- **Contact:** 9660074696\n- **Guardian:** Sarah Clark\n- **Guardian Contact:**\n\n**13. Hudson, Samantha**\n- **Student ID:** PDM-2025-000046\n- **Department:** CCS\n- **Contact:** 9246072598\n- **Guardian:** Gail Boyer\n- **Guardian Contact:**\n\n**14. Martinez, Maria**\n- **Student ID:** PDM-2025-000033\n- **Department:** CCS\n- **Contact:** 9806732623\n- **Guardian:** Abigail Lawrence\n- **Guardian Contact:**\n\n**15. Miles, David**\n- **Student ID:** PDM-2025-000059\n- **Department:** CCS\n- **Contact:** 9650327898\n- **Guardian:** Debbie Burton\n- **Guardian Contact:**\n\n**16. Miles, Karen**\n- **Student ID:** PDM-2025-000044\n- **Department:** CCS\n- **Contact:** 9551470667\n- **Guardian:** Teresa Jarvis\n- **Guardian Contact:**\n\n**17. Miller, Logan**\n- **Student ID:** PDM-2025-000034\n- **Department:** CCS\n- **Contact:** 9991725464\n- **Guardian:** Terry Schmidt\n- **Guardian Contact:**\n\n**18. Ochoa, Jaime**\n- **Student ID:** PDM-2025-000038\n- **Department:** CCS\n- **Contact:** 9829905736\n- **Guardian:** Rebecca Butler\n- **Guardian Contact:**\n\n**19. Pace, Lee**\n- **Student ID:** PDM-2025-000037\n- **Department:** CCS\n- **Contact:** 9948747224\n- **Guardian:** Jaime Fields\n- **Guardian Contact:**\n\n**20. Palmer, Brian**\n- **Student ID:** PDM-2025-000058\n- **Department:** CCS\n- **Contact:** 9589836425\n- **Guardian:** Kathy Hunt\n- **Guardian Contact:**\n\n**21. Richard, Jackie**\n- **Student ID:** PDM-2025-000055\n- **Department:** CCS\n- **Contact:** 9592971387\n- **Guardian:** Kristina Garner\n- **Guardian Contact:**\n\n**22. Roberts, Steven**\n- **Student ID:** PDM-2025-000057\n- **Department:** CCS\n- **Contact:** 9619121737\n- **Guardian:** Craig Callahan\n- **Guardian Contact:**\n\n**23. Ruiz, Erin**\n- **Student ID:** PDM-2025-000032\n- **Department:** CCS\n- **Contact:** 9263602462\n- **Guardian:** Crystal Johnson\n- **Guardian Contact:**\n\n**24. Stone, Rebecca**\n- **Student ID:** PDM-2025-000036\n- **Department:** CCS\n- **Contact:** 9524683884\n- **Guardian:** Kimberly Rodriguez\n- **Guardian Contact:**\n\n**25. Sutton, Christopher**\n- **Student ID:** PDM-2025-000053\n- **Department:** CCS\n- **Contact:** 9064873166\n- **Guardian:** Robert Smith\n- **Guardian Contact:**\n\n**26. Valdez, Elizabeth**\n- **Student ID:** PDM-2025-000048\n- **Department:** CCS\n- **Contact:** 9393149877\n- **Guardian:** Sean Berry\n- **Guardian Contact:**\n\n**27. Walker, John**\n- **Student ID:** PDM-2025-000052\n- **Department:** CCS\n- **Contact:** 9192445008\n- **Guardian:** Wanda Roberts\n- **Guardian Contact:**\n\n**28. Walker, Megan**\n- **Student ID:** PDM-2025-000056\n- **Department:** CCS\n- **Contact:** 9655792439\n- **Guardian:** Marcus Stafford\n- **Guardian Contact:**\n\n**29. White, Rhonda**\n- **Student ID:** PDM-2025-000039\n- **Department:** CCS\n- **Contact:** 9486019579\n- **Guardian:** Heather Davis\n- **Guardian Contact:**\n\n**30. Williams, Chloe**\n- **Student ID:** PDM-2025-000041\n- **Department:** CCS\n- **Contact:** 9945427450\n- **Guardian:** Anthony Carter\n- **Guardian Contact:**\n\n* Found a total of 30 students, organized as follows: [system_summary]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe williams",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Chloe Williams"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.40639066696167,
+      "timestamp": "2025-10-13T20:25:54.604740",
+      "final_answer": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe williams",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe williams"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.2619147300720215,
+      "timestamp": "2025-10-13T20:26:04.283686",
+      "final_answer": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Chloe Williams"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.9267659187316895,
+      "timestamp": "2025-10-13T20:38:13.271005",
+      "final_answer": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 3.6937999725341797,
+      "timestamp": "2025-10-13T20:38:23.502787",
+      "final_answer": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.9957220554351807,
+      "timestamp": "2025-10-13T20:38:41.909174",
+      "final_answer": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.4103002548217773,
+      "timestamp": "2025-10-13T20:38:50.955732",
+      "final_answer": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
     }
   ],
   "query_patterns": {},
