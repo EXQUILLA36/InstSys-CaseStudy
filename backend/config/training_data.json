@@ -8851,6 +8851,728 @@
       "final_answer": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
       "error_message": null,
       "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.242619276046753,
+      "timestamp": "2025-10-13T21:04:16.058577",
+      "final_answer": "I'm sorry, but I couldn't find any information about Chloe in the provided documents. It seems there was a technical problem retrieving the data.",
+      "error_message": "tuple index out of range",
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.203620433807373,
+      "timestamp": "2025-10-13T21:05:16.485855",
+      "final_answer": "I'm sorry, but I couldn't find any information about Chloe in the provided documents. It seems there was a technical problem retrieving the data.",
+      "error_message": "tuple index out of range",
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.0023794174194336,
+      "timestamp": "2025-10-13T21:05:28.860770",
+      "final_answer": "I'm sorry, but I couldn't find any information about Chloe in the provided documents. It seems there was a technical problem retrieving the data.",
+      "error_message": "tuple index out of range",
+      "corruption_details": null
+    },
+    {
+      "query": "who is rebecca",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.36985445022583,
+      "timestamp": "2025-10-13T21:05:44.476386",
+      "final_answer": "I'm sorry, but I couldn't find any information about Rebecca in the provided documents. It seems there was a technical problem retrieving the data.",
+      "error_message": "tuple index out of range",
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hello"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.554283380508423,
+      "timestamp": "2025-10-13T21:05:59.132380",
+      "final_answer": "Hello! How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.699047803878784,
+      "timestamp": "2025-10-13T21:06:04.949366",
+      "final_answer": "Chloe Williams is a student in the BSCS program at PDM, currently in her second year, section A, under the CCS department.\n\n- Chloe Williams is a student in the BSCS program.\n- She is currently in her second year, section A.\n- Chloe is under the CCS department.\n- Her student ID is PDM-2025-000041.\n- Her guardian's name is Anthony Carter.\n- Chloe's profile completion is at 87.5%.\n- Her contact number is 9945427450. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hello"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 1.859687328338623,
+      "timestamp": "2025-10-13T21:06:21.279067",
+      "final_answer": "Hello! How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.4495644569396973,
+      "timestamp": "2025-10-13T21:06:26.734254",
+      "final_answer": "Chloe Williams is a student in the BSCS program at PDM, currently in her second year, section A, under the CCS department.\n\n- Chloe Williams is a student in the BSCS program.\n- She is currently in her second year, section A.\n- Chloe is under the CCS department.\n- Her student ID is PDM-2025-000041.\n- Her guardian's name is Anthony Carter.\n- Chloe's profile completion is at 87.5%.\n- Her contact number is 9945427450. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.172224283218384,
+      "timestamp": "2025-10-13T21:12:06.296086",
+      "final_answer": "I couldn't find any information about Chloe in the provided documents.",
+      "error_message": "tuple index out of range",
+      "corruption_details": null
+    },
+    {
+      "query": "hey",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hey"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.0638656616210938,
+      "timestamp": "2025-10-13T21:16:51.003409",
+      "final_answer": "Hey there! How can I help you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.0768022537231445,
+      "timestamp": "2025-10-13T21:16:55.687594",
+      "final_answer": "I couldn't find any information about Chloe in the provided documents. [Factual Documents]",
+      "error_message": "can't compare offset-naive and offset-aware datetimes",
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.1358633041381836,
+      "timestamp": "2025-10-13T21:18:19.925967",
+      "final_answer": "I couldn't find any information about Chloe in the provided documents.",
+      "error_message": "can't compare offset-naive and offset-aware datetimes",
+      "corruption_details": null
+    },
+    {
+      "query": "hey",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hey"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.0273728370666504,
+      "timestamp": "2025-10-13T21:18:29.464454",
+      "final_answer": "Hey! How's it going? What can I help you with today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.440269947052002,
+      "timestamp": "2025-10-13T21:18:35.454257",
+      "final_answer": "Chloe Williams is a student at PDM or Pambayang Dalubhasaan ng Marilao. She is enrolled in the BSCS program, is in her second year, and is in section A. She is part of the CCS department.\n\n- Chloe Williams is a student in the BSCS program, year 2, section A, under the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is chloe",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "chloe"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.2204771041870117,
+      "timestamp": "2025-10-13T21:18:48.114331",
+      "final_answer": "Chloe Williams is a student in the BSCS program, year 2, section A, under the CCS department.\n\n- Chloe Williams is a student in the BSCS program, year 2, section A, under the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is michael carpenter",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Michael Carpenter"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.0001275539398193,
+      "timestamp": "2025-10-13T21:20:03.960518",
+      "final_answer": "I couldn't find information about Michael Carpenter. There was a technical problem retrieving the data.",
+      "error_message": "AIAnalyst.get_person_profile() got multiple values for argument 'person_name'",
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hello"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.082902431488037,
+      "timestamp": "2025-10-13T21:22:00.389553",
+      "final_answer": "Hello! How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is carpenter",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "find_people",
+              "parameters": {
+                "name": "carpenter"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.093273878097534,
+      "timestamp": "2025-10-13T21:22:05.456736",
+      "final_answer": "Patrick Carpenter is a student in the BSHM program, year 3, section B, under the CHTM department.\n\n- Patrick Carpenter is a student in the BSHM program, year 3, section B, under the CHTM department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is carpenter",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "carpenter"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.4592525959014893,
+      "timestamp": "2025-10-13T21:22:18.575036",
+      "final_answer": "Michael Carpenter is a student in the BSCS program, year 2, section A, under the CCS department. He is also a student in the BSHM program, year 3, section B, under the CHTM department.\n\n- Michael Carpenter is a student in the BSCS program, year 2, section A, under the CCS department. [students]\n- Michael Carpenter is a student in the BSHM program, year 3, section B, under the CHTM department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is carpenter",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Carpenter"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 2.348893642425537,
+      "timestamp": "2025-10-13T21:22:31.240403",
+      "final_answer": "Michael Carpenter is a student in the BSCS program, year 2, section A, under the CCS department. He is also a student in the BSHM program, year 3, section B, under the CHTM department.\n\n- Michael Carpenter is a student in the BSCS program, year 2, section A, under the CCS department. [students]\n- Michael Carpenter is a student in the BSHM program, year 3, section B, under the CHTM department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is rebecca",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.6011757850646973,
+      "timestamp": "2025-10-13T21:22:40.772512",
+      "final_answer": "Rebecca Stone is a student in the BSCS program, year 2, section A, under the CCS department.\n\n- Rebecca Stone is a student in the BSCS program, year 2, section A, under the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is rebecca",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "rebecca"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 5.471127986907959,
+      "timestamp": "2025-10-13T21:22:51.363805",
+      "final_answer": "Rebecca Stone is a student in the BSCS program, year 2, section A, under the CCS department.\n\n- Rebecca Stone is a student in the BSCS program, year 2, section A, under the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is erin ruiz",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Erin Ruiz"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.057335138320923,
+      "timestamp": "2025-10-13T21:23:03.718299",
+      "final_answer": "Erin Ruiz is a student in the BSCS program, year 2, section A, under the CCS department.\n\n- Erin Ruiz is a student in the BSCS program, year 2, section A, under the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is erin",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "erin"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.040755271911621,
+      "timestamp": "2025-10-13T21:23:10.421870",
+      "final_answer": "Erin Ruiz is a student in the BSCS program, year 2, section A, under the CCS department.\n\n- Erin Ruiz is a student in the BSCS program, year 2, section A, under the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is erin ruiz",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Erin Ruiz"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.762521266937256,
+      "timestamp": "2025-10-13T21:23:17.713060",
+      "final_answer": "Erin Ruiz is a student in the BSCS program, year 2, section A, under the CCS department.\n\n- Erin Ruiz is a student in the BSCS program, year 2, section A, under the CCS department. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is the guardian of erin ruiz",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_question_about_person",
+              "parameters": {
+                "person_name": "Erin Ruiz",
+                "question": "who is the guardian of erin ruiz"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "FAIL_EXECUTION",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 0,
+      "execution_time": 2.5521843433380127,
+      "timestamp": "2025-10-13T21:23:29.773593",
+      "final_answer": "I'm sorry, but I couldn't find the guardian information for Erin Ruiz in the provided documents. It seems there was a technical issue while retrieving the data.",
+      "error_message": "AIAnalyst.answer_question_about_person() got multiple values for argument 'person_name'",
+      "corruption_details": null
+    },
+    {
+      "query": "who is erin ruiz's guardian",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_question_about_person",
+              "parameters": {
+                "person_name": "Erin Ruiz",
+                "question": "who is erin ruiz's guardian"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 2,
+      "execution_time": 3.644505739212036,
+      "timestamp": "2025-10-13T21:25:37.093357",
+      "final_answer": "Crystal Johnson is Erin Ruiz's guardian.\n\n- Crystal Johnson is listed as the guardian of Erin Ruiz in the student profile. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "hello",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "answer_conversational_query",
+              "parameters": {
+                "query": "hello"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_CONVERSATIONAL",
+      "analyst_mode": "unknown",
+      "execution_mode": "unknown",
+      "results_count": 0,
+      "execution_time": 2.2795262336730957,
+      "timestamp": "2025-10-13T21:44:54.556885",
+      "final_answer": "Hello! How can I assist you today?",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is mark",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "mark"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 5,
+      "execution_time": 3.225274085998535,
+      "timestamp": "2025-10-13T21:47:18.802282",
+      "final_answer": "There are five students named Mark in the system.\n\n- Mark Barnes, ID: PDM-2025-000035, Program: BSCS, Year: 2, Section: A, Department: CCS. [students]\n- Mark Garcia, ID: PDM-2025-001354, Program: BSIT, Year: 1, Section: A, Department: CCS. [students]\n- Mark Bautista, ID: PDM-2025-001355, Program: BSIT, Year: 1, Section: A, Department: CCS. [students]\n- Mark Mendoza, ID: PDM-2025-001357, Program: BSIT, Year: 1, Section: A, Department: CCS. [students]\n- Mark Castro, ID: PDM-2025-001448, Program: BSIT, Year: 4, Section: A, Department: CCS. [students]",
+      "error_message": null,
+      "corruption_details": null
+    },
+    {
+      "query": "who is Mark Bautista",
+      "plan": {
+        "plan": [
+          {
+            "tool_call": {
+              "tool_name": "get_person_profile",
+              "parameters": {
+                "person_name": "Mark Bautista"
+              }
+            }
+          }
+        ]
+      },
+      "outcome": "SUCCESS_DIRECT",
+      "analyst_mode": "online",
+      "execution_mode": "primary",
+      "results_count": 1,
+      "execution_time": 2.616055965423584,
+      "timestamp": "2025-10-13T21:47:34.792966",
+      "final_answer": "Mark Bautista is a first-year student in the BSIT program, Section A, in the College of Computer Studies (CCS). He is identified by the student ID PDM-2025-001355.\n\n- ID: PDM-2025-001355, Program: BSIT, Year: 1, Section: A, Department: CCS. [students]\n- Guardian: Daniel Reyes. [students]",
+      "error_message": null,
+      "corruption_details": null
     }
   ],
   "query_patterns": {},

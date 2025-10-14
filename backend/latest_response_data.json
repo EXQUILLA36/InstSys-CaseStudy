@@ -1,27 +1,27 @@
 {
-  "ai_response": "Chloe Williams is a second-year Bachelor of Science in Computer Science (BSCS) student in Section A of the College of Computer Studies (CCS).\n\n* Chloe Williams is a second-year BSCS student in Section A of the CCS department. [students]",
+  "ai_response": "Mark Bautista is a first-year student in the BSIT program, Section A, in the College of Computer Studies (CCS). He is identified by the student ID PDM-2025-001355.\n\n- ID: PDM-2025-001355, Program: BSIT, Year: 1, Section: A, Department: CCS. [students]\n- Guardian: Daniel Reyes. [students]",
   "structured_data": [
     {
       "source_collection": "students",
-      "content": "Student profile for Williams, Chloe. ID: PDM-2025-000041. Program: BSCS, Year: 2, Section: A. Department: CCS.",
+      "content": "Student profile for Mark Bautista. ID: PDM-2025-001355. Program: BSIT, Year: 1, Section: A. Department: CCS.",
       "metadata": {
-        "_id": "68eb740c080b715e987d9e04",
-        "student_id": "PDM-2025-000041",
-        "completion_percentage": "87.5",
-        "contact_number": "9945427450",
-        "course": "BSCS",
-        "created_at": "2025-10-12 09:25:32.420000",
+        "_id": "68eb740c080b715e987d9e8e",
+        "student_id": "PDM-2025-001355",
+        "completion_percentage": "50.0",
+        "contact_number": "9681502410",
+        "course": "BSIT",
+        "created_at": "2025-10-12 09:25:32.695000",
         "department": "CCS",
-        "field_status": "{'student_id': 'complete', 'surname': 'complete', 'first_name': 'complete', 'course': 'complete', 'section': 'complete', 'year': 'complete', 'image': 'complete', 'audio': 'waiting'}",
-        "first_name": "Chloe",
-        "full_name": "Williams, Chloe",
+        "field_status": "{'student_id': 'complete', 'surname': 'missing', 'first_name': 'missing', 'course': 'complete', 'section': 'complete', 'year': 'complete', 'image': 'waiting', 'audio': 'waiting'}",
+        "first_name": "",
+        "full_name": "Mark Bautista",
         "guardian_contact": "",
-        "guardian_name": "Anthony Carter",
+        "guardian_name": "Daniel Reyes",
         "section": "A",
         "source": "file_extraction",
-        "surname": "Williams",
-        "updated_at": "2025-10-12 09:25:53.426000",
-        "year": "2"
+        "surname": "",
+        "updated_at": "2025-10-12 09:25:32.695000",
+        "year": "1"
       }
     }
   ],

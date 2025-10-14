@@ -12,7 +12,7 @@ os.chdir(Path(__file__).resolve().parents[1])
 # Add the current directory to the system path to allow importing AI.py
 sys.path.append(str(Path(__file__).resolve().parent))
 
-from AI import AIAnalyst
+from ai_core import AIAnalyst
 
 def main():
     """
