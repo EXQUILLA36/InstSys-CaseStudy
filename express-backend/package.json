@@ -4,7 +4,7 @@
   "description": "Student Database Management System - Backend",
   "main": "utils/main.js",
   "scripts": {
-    "start": "node utils/run_system.js",
+    "start": "node server.js",
     "dev": "nodemon utils/run_system.js",
     "test": "node utils/main.js",
     "system": "node utils/run_system.js",

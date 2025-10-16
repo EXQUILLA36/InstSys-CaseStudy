@@ -57,7 +57,7 @@ import React, { useState, useEffect, useRef } from "react";
       setMessages((prev) => [...prev, loadingMsg])
 
       // Call Flask backend
-      fetch("http://localhost:5000/chatprompt", {
+      fetch("http://localhost:4000/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: text }),

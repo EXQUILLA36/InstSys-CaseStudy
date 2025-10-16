@@ -1,4 +1,6 @@
 {
+  "name": "pdm-monorepo",
+  "private": true,
   "dependencies": {
     "mongoose": "^8.19.1",
     "react": "^19.1.1",
@@ -7,6 +9,13 @@
   },
   "devDependencies": {
     "@types/react": "^19.1.11",
-    "@types/react-dom": "^19.1.7"
+    "@types/react-dom": "^19.1.7",
+    "concurrently": "^9.2.1"
+  },
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "start:backend": "cd express-backend && npm start",
+    "start:ai": "cd python-backend && py -X utf8 entrypoint.py --host=0.0.0.0",
+    "start:all": "concurrently \"npm:start:ai\" \"npm:dev:frontend\" \"npm:start:backend\" "
   }
 }
