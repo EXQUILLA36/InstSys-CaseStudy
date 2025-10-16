@@ -34,7 +34,8 @@ build/
 
 # Environment files
 frontend/.env
-backend/.env
+express-backend/.env
+python-backend/.env
 
 # =========================
 # OS / IDE FILES
