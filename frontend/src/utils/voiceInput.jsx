@@ -170,18 +170,18 @@ export default function VoiceInput({ setInput, micON, sendMessage, toggleMic  })
 
         // 4. Close the AudioContext safely
         if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-            audioContextRef.current.close();
-            console.log("micON changed:", micON);
-          } else {
-            console.log("AudioContext already closed — skipping");
-          }
+          audioContextRef.current.close();
+          console.log("micON changed:", micON);
+        } else {
+          console.log("AudioContext already closed — skipping");
+        }
           if (recognitionRef.current) {
-        recognitionRef.current.stop();        
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current = null;
-        console.log("Speech recognition stopped.");
-      }
+            recognitionRef.current.stop();        
+            recognitionRef.current.onresult = null;
+            recognitionRef.current.onerror = null;
+            recognitionRef.current = null;
+            console.log("Speech recognition stopped.");
+        }
 
       // Optional: Reset transcript state if desired
       setTranscript("");

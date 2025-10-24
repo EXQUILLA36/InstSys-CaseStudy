@@ -1,5 +1,13 @@
 {
+  "scripts": {
+    "start:server": "cd express-backend && npm run start:server",
+    "start:frontend": "cd frontend && npm run dev",
+    "start:entrypoint": "cd python-backend && uvicorn entrypoint:app --port 5001 --reload",
+    "start:express-frontend": "concurrently \"cd express-backend && npm run start:server\" \"cd frontend && npm run dev\"",
+    "start:all": "concurrently \"cd frontend && npm run dev\" \"cd express-backend && npm run start:server\" \"cd python-backend && uvicorn entrypoint:app --port 5001 --reload\""
+  },
   "dependencies": {
+    "concurrently": "^9.2.1",
     "mongoose": "^8.19.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

@@ -86,7 +86,7 @@ function AiChat({ messages, input, setInput, handleSubmit, boxRef, studentData, 
 
         </div>
 
-        <div className="searchBox component w-[90%] h-[8%] !mt-4 pr-5 gap-2 flex flex-row bg-gray-50 justify-center items-center">
+        <div className="searchBox component w-[90%] h-[3vw] !mt-4 pr-5 gap-2 flex flex-row bg-gray-50 justify-center items-center">
           {/* Input Form for sending message */}
           <div className="w-full h-[70%] flex items-center">
             {/* Always render both components */}
@@ -100,7 +100,7 @@ function AiChat({ messages, input, setInput, handleSubmit, boxRef, studentData, 
                 placeholder="Ask anything..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="w-full h-full !p-4 font-sans text-2xl focus:outline-none focus:ring-0"
+                className="w-full h-full !p-4 font-sans text-[clamp(0.6rem,1.3vw,1.5rem)] focus:outline-none focus:ring-0"
               />
             </form>
 
@@ -110,7 +110,7 @@ function AiChat({ messages, input, setInput, handleSubmit, boxRef, studentData, 
               {/* MIC BUTTON */}
               <button
               onClick={toggleMic} // Toggle mic on click
-                className={`mic rounded-full w-11 h-11 mr-1 aspect-square flex items-center justify-center cursor-pointer transition-transform transform-gpu duration-300 hover:scale-105 
+                className={`mic rounded-full w-[2.5vw] h-[2.5vw] mr-1 aspect-square flex items-center justify-center cursor-pointer transition-transform transform-gpu duration-300 hover:scale-105 
                 ${micON ? "bg-red-500/60 shadow-gray-800 shadow-md" : "hover:bg-gray-300/70"}`}
                 title="Voice Input"
               >
@@ -120,7 +120,7 @@ function AiChat({ messages, input, setInput, handleSubmit, boxRef, studentData, 
                   height="800"
                   viewBox="0 0 24 24"
                   fill="none"
-                  className="w-8 h-8 text-black"
+                  className="w-[1.8vw] h-[1.8vw] text-black"
                 >
                   <path
                     d="M12 14C13.6569 14 15 12.6569 15 11V5C15 3.34315 13.6569 2 12 2C10.3431 2 9 3.34315 9 5V11C9 12.6569 10.3431 14 12 14Z"
@@ -149,7 +149,7 @@ function AiChat({ messages, input, setInput, handleSubmit, boxRef, studentData, 
               {/* SEND BUTTON */}
               <button
                 onClick={handleSubmit} //sends the message on click
-                className="send bg-gray-400/50 shadow-gray-500 shadow-sm rounded-full w-12 h-12 aspect-square rotate-45 flex items-center justify-center cursor-pointer duration-300 hover:bg-gray-500/70"
+                className="send bg-gray-400/50 shadow-gray-500 shadow-sm rounded-full w-[2.5vw] h-[2.5vw] aspect-square rotate-45 flex items-center justify-center cursor-pointer duration-300 hover:bg-gray-500/70"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -159,7 +159,7 @@ function AiChat({ messages, input, setInput, handleSubmit, boxRef, studentData, 
                   strokeWidth="1"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-8 h-8 text-black"
+                  className="w-[2vw] h-[2vw] text-black"
                 >
                   <path d="M22 2L11 13"></path>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>

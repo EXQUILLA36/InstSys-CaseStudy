@@ -31,35 +31,22 @@ class AIAnalyst:
     It uses a Planner LLM to decide which tool to use, executes the tool(s) to
     retrieve data, and then uses a Synthesizer LLM to generate a final answer.
     """
-    # In LLM_model.py, inside the AIAnalyst class:
-
-    def __init__(self, collections: List[str], llm_config: Optional[dict] = None, execution_mode: str = "split"):
+    def __init__(self, collections: Dict[str, Any], llm_config: Optional[dict] = None, execution_mode: str = "split"):
         """
-        [MODIFIED] Initializes the AI Analyst with a MongoDB connection.
-        """
-        # --- NEW MONGODB CONNECTION ---
-        mongo_cfg = llm_config.get("mongodb", {})
-        mongo_connection_string = mongo_cfg.get("connection_string", "mongodb://localhost:27017/")
-        mongo_db_name = mongo_cfg.get("database_name", "school_system")
-        
-        try:
-            self.mongo_client = MongoClient(mongo_connection_string)
-            self.mongo_db = self.mongo_client[mongo_db_name]
-            self.mongo_client.admin.command('ping')
-            print(f"✅ Successfully connected to MongoDB database: '{mongo_db_name}'")
-        except Exception as e:
-            print(f"❌ Failed to connect to MongoDB: {e}")
-            raise
-            
-        self.collections = {name: MongoCollectionAdapter(self.mongo_db[name]) for name in collections}
-        print(f"📚 AI Analyst is now using MongoDB collections: {list(self.collections.keys())}")
-        # --- END OF MONGODB MODIFICATIONS ---
+        Initializes the AI Analyst.
 
+        Args:
+            collections: A dictionary of database collections (e.g., from ChromaDB).
+            llm_config: The full configuration dictionary from config.json.
+            execution_mode: The operational mode ('online', 'offline', or 'split').
+        """
         self.execution_mode = execution_mode
         config = llm_config or {}
         online_cfg = config.get('online', {})
         offline_cfg = config.get('offline', {})
 
+        
+        # Load chat settings from the config file
         chat_cfg = config.get('chat_settings', {})
         # In-memory cache for active sessions to reduce DB reads
         self.sessions_cache = {}
@@ -78,29 +65,35 @@ class AIAnalyst:
             
         }
 
+        # Explicitly set the api_mode for each configuration
         online_cfg['api_mode'] = 'online'
         offline_cfg['api_mode'] = 'offline'
 
+        # Set up planner and synthesizer LLMs based on the execution mode
         if execution_mode == 'online':
             print("AI Analyst running in FULLY ONLINE mode.")
             self.planner_llm = LLMService(online_cfg)
             self.synth_llm = LLMService(online_cfg)
             self.debug_mode = online_cfg.get("debug_mode", False)
+            
         elif execution_mode == 'offline':
             print("AI Analyst running in FULLY OFFLINE mode.")
             self.planner_llm = LLMService(offline_cfg)
             self.synth_llm = LLMService(offline_cfg)
             self.debug_mode = offline_cfg.get("debug_mode", False)
-        else:
+            
+        else: # Default to 'split' mode
             print("AI Analyst running in SPLIT mode (Offline Planner, Online Synthesizer).")
             self.planner_llm = LLMService(offline_cfg)
             self.synth_llm = LLMService(online_cfg)
             self.debug_mode = offline_cfg.get("debug_mode", False)
 
+        self.collections = collections or {}
         self.db_schema_summary = "Schema not generated yet."
         self.REVERSE_SCHEMA_MAP = self._create_reverse_schema_map()
         self._generate_db_schema()
         
+        # Pre-load unique filter values from the database to improve prompt accuracy
         self.debug("Pre-loading dynamic filter values from database...")
         self.all_positions = self._get_unique_values_for_field(['position'])
         self.all_departments = self._get_unique_values_for_field(['department'])
@@ -110,7 +103,7 @@ class AIAnalyst:
         self.debug(f"  -> Found {len(self.all_departments)} departments: {self.all_departments}")
         self.debug(f"  -> Found {len(self.all_programs)} programs: {self.all_programs}")
         self.debug(f"  -> Found {len(self.all_statuses)} statuses: {self.all_statuses}")
-        self.all_doc_types = self._get_unique_document_types()
+        self.all_doc_types = self._get_unique_document_types() # <-- ADD THIS
             
         self.training_system = TrainingSystem()
         self.dynamic_examples = self._load_dynamic_examples()
@@ -118,6 +111,7 @@ class AIAnalyst:
         self.last_referenced_aliases = []
         self.corruption_warnings = set() 
 
+        # Map tool names to their corresponding methods
         self.available_tools = {
             "answer_conversational_query": self.answer_conversational_query,
             "get_data_by_id": self.get_data_by_id,
@@ -313,32 +307,34 @@ class AIAnalyst:
         return found_types
 
     def _get_unique_values_for_field(self, fields: List[str], collection_filter: Optional[str] = None) -> List[str]:
+        """
+        [UPGRADED] Directly queries the database to get all unique, non-empty values
+        for a given list of field names, with an optional collection filter.
+        """
         unique_values = set()
         
-        # Translate AI-friendly field names to the actual DB field names
-        db_fields = []
-        for field in fields:
-            if field in ['program', 'course']:
-                db_fields.append('course')
-            elif field == 'year_level':
-                db_fields.append('year')
-            else:
-                db_fields.append(field)
-        db_fields = list(set(db_fields)) # Remove duplicates
+        # Create a reverse map for the fields we are interested in
+        field_map = {
+            std_field: list(set([std_field] + [orig for orig, std in self.REVERSE_SCHEMA_MAP.items() if std == std_field]))
+            for std_field in fields
+        }
+        all_possible_keys = [key for sublist in field_map.values() for key in sublist]
 
-        for name, coll_adapter in self.collections.items():
+        for name, coll in self.collections.items():
             if collection_filter and collection_filter not in name:
                 continue
+            
             try:
-                for db_field in db_fields:
-                    # Use pymongo's distinct() method for efficiency
-                    values = coll_adapter.collection.distinct(db_field)
-                    for val in values:
-                        if val: # Ensure value is not None or empty
-                            unique_values.add(str(val).strip().upper())
+                # Get all metadata from the collection
+                results = coll.get(include=["metadatas"])
+                for meta in results.get("metadatas", []):
+                    # Check for any of the possible keys
+                    for key in all_possible_keys:
+                        if key in meta and meta[key]:
+                            unique_values.add(str(meta[key]).strip().upper())
             except Exception as e:
                 self.debug(f"⚠️ Error during _get_unique_values_for_field in {name}: {e}")
-                
+
         return sorted(list(unique_values))
         
     
@@ -597,8 +593,8 @@ class AIAnalyst:
 
     def get_database_summary(self) -> List[dict]:
         """
-        [MODIFIED] Provides a high-level summary of the database. This version is adapted
-        to correctly unpack the data structure from the MongoCollectionAdapter.
+        Provides a high-level summary of the database, including collection names, 
+        item counts, and a sample of the key data fields in each collection.
         """
         self.debug("🛠️ Running upgraded tool: get_database_summary")
         summary_docs = []
@@ -609,21 +605,17 @@ class AIAnalyst:
         overall_summary = f"The database contains {len(self.collections)} collections. Here is a summary of each one:"
         summary_docs.append({"source_collection": "system_summary", "content": overall_summary, "metadata": {}})
 
-        for name, coll_adapter in self.collections.items():
+        for name, coll in self.collections.items():
             try:
-                count = coll_adapter.count()
-                # Use the adapter's .peek() method to get a sample
-                sample = coll_adapter.peek(limit=3)
+                count = coll.count()
+                # Retrieve a small sample of items to inspect the metadata
+                sample = coll.peek(limit=3)
                 
-                # --- THIS IS THE FIX ---
-                # Correctly unpack the nested list format from the adapter's output
-                metadatas_list = (sample.get("metadatas") or [[]])[0]
+                # Get the metadata keys from the first item, if it exists
+                sample_keys = list(sample['metadatas'][0].keys()) if sample['metadatas'] else []
                 
-                sample_keys = list(metadatas_list[0].keys()) if metadatas_list else []
-                # --- END OF FIX ---
-
                 # Clean up the keys for better readability
-                keys_to_show = sorted([key for key in sample_keys if not key.startswith('_') and key not in ['content', 'audio', 'image', 'field_status']])[:7]
+                keys_to_show = sorted([key for key in sample_keys if not key.endswith('_id')])[:5] # Show up to 5 keys
                 
                 summary_docs.append({
                     "source_collection": "collection_info",
@@ -1354,28 +1346,34 @@ class AIAnalyst:
 
     def _generate_db_schema(self):
         """
-        [MODIFIED] Inspects the MongoDB collections to create a simplified, human-readable schema summary.
-        This version is adapted to handle the output format of the MongoCollectionAdapter.
+        Inspects the database collections to create a simplified, human-readable schema summary,
+        including hints about possible values for certain fields. This is used in the planner's prompt.
         """
         if not self.collections:
             self.db_schema_summary = "No collections loaded."
             return
 
+        FIELDS_TO_HINT = ['position', 'department', 'program', 'faculty_type', 'admin_type', 'employment_status']
+        HINT_LIMIT = 7
+        
         raw = {}
-        # This function no longer uses value hints as it's less efficient with MongoDB's flat structure
-        # and we already get this data in the pre-loading step.
+        value_hints = {}
 
-        for name, coll_adapter in self.collections.items():
+        for name, coll in self.collections.items():
             try:
-                # Use the adapter's get() method to fetch a sample
-                sample = coll_adapter.get(limit=1)
-                
-                # Correctly extract the metadata from the adapter's nested list format
-                metadatas_list = (sample.get("metadatas") or [[]])[0]
-
-                if metadatas_list:
-                    # Get keys from the first document's metadata
+                sample = coll.get(limit=100, include=["metadatas"])
+                if sample and sample.get("metadatas") and sample["metadatas"]:
+                    metadatas_list = sample["metadatas"]
                     raw[name] = list(metadatas_list[0].keys())
+                    value_hints[name] = {}
+                    for field in FIELDS_TO_HINT:
+                        unique_values = set()
+                        for meta in metadatas_list:
+                            if field in meta and meta[field]:
+                                unique_values.add(str(meta[field]))
+                        if unique_values:
+                            hint_list = sorted(list(unique_values))
+                            value_hints[name][field] = hint_list[:HINT_LIMIT]
                 else:
                     raw[name] = []
             except Exception as e:
@@ -1384,11 +1382,20 @@ class AIAnalyst:
 
         norm = self._normalize_schema(raw)
         
+        schema_hints = {
+            "subjects_by_year": '(format: a dictionary string, not filterable by year)'
+        }
+        
         parts = []
         for name, fields in norm.items():
-            # Clean up the fields for better readability in the prompt
-            fields_to_show = sorted([f for f in fields if not f.startswith('_') and f != 'content'])
-            parts.append(f"- {name}: {fields_to_show}")
+            described_fields = [f"{field} {schema_hints[field]}" if field in schema_hints else field for field in fields]
+            parts.append(f"- {name}: {described_fields}")
+            if name in value_hints and value_hints[name]:
+                hint_parts = []
+                for field, values in value_hints[name].items():
+                    hint_parts.append(f"'{field}' can be {values}")
+                if hint_parts:
+                    parts.append(f"   (Hint: {', '.join(hint_parts)})")
 
         self.db_schema_summary = "\n".join(parts)
         self.debug("DB Schema for planner:\n", self.db_schema_summary)
@@ -2002,21 +2009,6 @@ class AIAnalyst:
                     self.corruption_warnings.add(name)
 
         return all_hits
-    
-
-    def _translate_or_filter_for_mongo(self, filters: dict) -> dict:
-        """Helper to translate complex $or filters with aliases."""
-        or_conditions = filters.get('$or', [])
-        mongo_or_list = []
-        for condition in or_conditions:
-            if not isinstance(condition, dict): continue
-            for k, v in condition.items():
-                standard_key = self.REVERSE_SCHEMA_MAP.get(k, k)
-                db_key = standard_key
-                if standard_key == 'program': db_key = 'course'
-                if standard_key == 'year_level': db_key = 'year'
-                mongo_or_list.append({db_key: v})
-        return {"$or": mongo_or_list} if mongo_or_list else {}
 
         
     def _validate_plan(self, plan_json: Optional[dict]) -> tuple[bool, Optional[str]]:
@@ -2313,52 +2305,47 @@ class AIAnalyst:
 
 
 
-            # In AI.py, inside the execute_reasoning_plan method:
+            tool_name = tool_call_json.get("tool_name")
+            params = tool_call_json.get("parameters", {})
+            is_student_list_query = tool_name == "find_people" and not params.get("name") and \
+                                    (params.get("role") == "student" or params.get("program") or params.get("year_level"))
 
-            # --- FINAL: COMPLETE & DETAILED GROUPING LOGIC ---
-            # Group if we have more than a few results to make the context cleaner for the AI.
-            if len(collected_docs) > 5:
-                first_doc_meta = collected_docs[0].get("metadata", {})
+            if is_student_list_query and collected_docs:
+                self.debug("-> Consolidating de-duplicated student list into a single summary document.")
+                student_profiles_found = []
+                other_documents = []
 
-                # Step 1: Identify if the data is about students by checking for its unique fields.
-                is_student_data = "student_id" in first_doc_meta and "guardian_name" in first_doc_meta
+                for doc in collected_docs: # Use the de-duplicated list
+                    if "Guardian Name:" in doc.get("content", ""):
+                        student_profiles_found.append(doc)
+                    else:
+                        other_documents.append(doc)
 
-                if is_student_data:
-                    self.debug(f"-> Student result set ({len(collected_docs)} docs) detected. Grouping with ALL details.")
+                if student_profiles_found:
+                    total_students = len(student_profiles_found)
+                    summary_header = f"Total Students Found: {total_students}\n"
                     
-                    from collections import defaultdict
-                    grouped_students = defaultdict(list)
+                    student_list_items = []
+                    for i, student_doc in enumerate(student_profiles_found, 1):
+                        meta = student_doc.get("metadata", {})
+                        name = meta.get('full_name', 'N/A')
+                        student_id = meta.get('student_id', 'N/A')
+                        course = meta.get('course', 'N/A')
+                        year = meta.get('year_level', 'N/A')
+                        section = meta.get('section', 'N/A')
+                        
+                        list_item = f"{i}. Name: {name}, ID: {student_id}, Program: {course} {year}-{section}"
+                        student_list_items.append(list_item)
+                        
+                    final_content = summary_header + "\n".join(student_list_items)
                     
-                    # Step 2: Group the full metadata objects for each student.
-                    for doc in collected_docs:
-                        meta = doc.get("metadata", {})
-                        course = meta.get("course", "N/A")
-                        year = meta.get("year", "N/A")
-                        section = meta.get("section", "N/A")
-                        group_key = f"{course} - Year {year} - Section {section}"
-                        grouped_students[group_key].append(meta)
+                    consolidated_document = {
+                        "source_collection": "student_list_summary",
+                        "content": final_content,
+                        "metadata": { "status": "success", "total_found": total_students, "query_type": "student_list" }
+                    }
                     
-                    # Step 3: Build a rich, markdown-formatted summary with ALL relevant details.
-                    summary_content = f"Found a total of {len(collected_docs)} students, organized as follows:\n\n"
-                    
-                    for group, metas in sorted(grouped_students.items()):
-                        summary_content += f"## {group} ({len(metas)} students)\n\n"
-                        # Create a complete profile card for each student in the group.
-                        for i, meta in enumerate(sorted(metas, key=lambda x: x.get('full_name', ''))):
-                            summary_content += f"**{i+1}. {meta.get('full_name', 'N/A')}**\n"
-                            summary_content += f"- **Student ID:** {meta.get('student_id', 'N/A')}\n"
-                            summary_content += f"- **Department:** {meta.get('department', 'N/A')}\n"
-                            summary_content += f"- **Contact:** {meta.get('contact_number', 'N/A')}\n"
-                            summary_content += f"- **Guardian:** {meta.get('guardian_name', 'N/A')}\n"
-                            summary_content += f"- **Guardian Contact:** {meta.get('guardian_contact', 'N/A')}\n\n"
-
-                    # Step 4: Replace the long list of documents with our single, comprehensive summary.
-                    collected_docs = [{
-                        "source_collection": "system_summary",
-                        "content": summary_content,
-                        "metadata": {"status": "success", "total_found": len(collected_docs)}
-                    }]
-            # --- END OF FINAL GROUPING LOGIC ---
+                    collected_docs = [consolidated_document] + other_documents
 
 
                 # --- ✨ START: DEBUG CODE TO SHOW RETRIEVED DOCS ---

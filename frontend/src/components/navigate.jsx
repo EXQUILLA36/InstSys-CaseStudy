@@ -10,13 +10,13 @@ function Navigate() {
   const [chatInitialView, setChatInitialView] = useState("chat");
   const [studentId, setStudentId] = useState(null);
 
-  useEffect(() => {
-    const savedStudentId = localStorage.getItem("studentId");
-    if (savedStudentId) {
-      setStudentId(savedStudentId);
-      setPage("dashboard");
-    }
-  }, []);
+  // useEffect(() => {
+  //   const savedStudentId = localStorage.getItem("studentId");
+  //   if (savedStudentId) {
+  //     setStudentId(savedStudentId);
+  //     setPage("dashboard");
+  //   }
+  // }, []);
 
    const handleLogin = (id) => {
     localStorage.setItem("studentId", id);

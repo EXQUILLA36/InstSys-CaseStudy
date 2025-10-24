@@ -45,6 +45,7 @@ import React, { useState, useEffect, useRef } from "react";
 
 
     const sendMessage = (text) => {
+      console.log("Sending message:", text);
       // Add user's message
       setMessages((prev) => [...prev, { sender: "user", text }]);
 
@@ -57,14 +58,14 @@ import React, { useState, useEffect, useRef } from "react";
       setMessages((prev) => [...prev, loadingMsg])
 
       // Call Flask backend
-      fetch("http://localhost:5000/chatprompt", {
+      fetch("http://localhost:5000/v1/chat/prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: text }),
       })
-        .then((res) => res.json())
-        .then((data) => {
-          setMessages((prev) => {
+      .then((res) => res.json())
+      .then((data) => {
+        setMessages((prev) => {
             const filtered = prev.filter((msg) => msg.type !== "loading");
             return [
               ...filtered,

@@ -3,12 +3,14 @@
   "version": "1.0.0",
   "description": "Student Database Management System - Backend",
   "main": "utils/main.js",
+  "type": "module",
   "scripts": {
     "start": "node utils/run_system.js",
     "dev": "nodemon utils/run_system.js",
     "test": "node utils/main.js",
     "system": "node utils/run_system.js",
-    "process-excel": "node utils/process_my_excel.js"
+    "process-excel": "node utils/process_my_excel.js",
+    "start:server": "nodemon server.js"
   },
   "keywords": [
     "student",
@@ -19,6 +21,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^1.12.2",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "mongodb": "^6.3.0",
     "xlsx": "^0.18.5"
   },

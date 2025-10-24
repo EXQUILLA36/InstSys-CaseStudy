@@ -1,6 +1,6 @@
 # prepare_mongo_data.py
 import os
-from pymongo import MongoClient
+from pymongo import MongoClient #type: ignore
 
 # --- CONFIGURATION ---
 MONGO_URI = "mongodb://localhost:27017/" # e.g., "mongodb://localhost:27017/"
@@ -25,7 +25,7 @@ def generate_content_field():
 
     print(f"🔥 Found {len(docs_to_process)} documents in '{COLLECTION_NAME}' to update...")
 
-    from pymongo import UpdateOne
+    from pymongo import UpdateOne #type: ignore
     operations = []
 
     for doc in docs_to_process:

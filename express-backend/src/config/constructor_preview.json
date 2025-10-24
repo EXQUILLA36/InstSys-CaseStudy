@@ -1,0 +1,20 @@
+{
+  "TEST-USER-001": {
+    "_id": "TEST-USER-001",
+    "student_name": "Test User One",
+    "year": "1",
+    "course": "Bachelor of Science in Information Technology (BSIT)",
+    "email": "test.user@example.com",
+    "password": "$2b$10$xxhxEwaUt9YeTf9/McIcku0Qnys.If0CxsCMqb2cSlibOICGqmgkK",
+    "role": "student IT"
+  },
+  "TEST-USER-002": {
+    "_id": "TEST-USER-002",
+    "student_name": "Test User Two",
+    "year": "1",
+    "course": "Bachelor of Science in Information Technology (BSIT)",
+    "email": "test.user2@example.com",
+    "password": "$2b$10$HQGyfW78TriGTRr7tzqpguvF0xRixzB4926wwoGKgvhAPJOOzHhLC",
+    "role": "student IT"
+  }
+}
