@@ -24,11 +24,16 @@ class MongoCollectionAdapter:
         """
         self.collection = collection
 
+
+        # backend/utils/ai_core/database.py
+# ... (imports and class MongoCollectionAdapter) ...
+
+# --- REPLACE THIS ENTIRE METHOD ---
+
     def _format_output(self, documents: List[Dict]) -> Dict:
         """
-        [MODIFIED & MORE ROBUST] Now dynamically constructs the 'content' string if it's
-        missing from the database document, ensuring uniqueness for de-duplication.
-        Also adds an 'image_url' to the metadata if an image is available.
+        [CORRECTED V3 - Content-Aware] Prioritizes 'formatted_text' as the
+        main 'content' to ensure the Synthesizer AI sees the most important data.
         """
         if not documents:
             return {"documents": [[]], "metadatas": [[]], "ids": [[]]}
@@ -39,31 +44,49 @@ class MongoCollectionAdapter:
         
         base_url = "http://127.0.0.1:8000" # Your FastAPI server URL
 
-
-        # In database.py, inside MongoCollectionAdapter._format_output
-
-# --- REPLACE THE "THIS IS THE FIX" BLOCK WITH THIS ---
-
         for doc in documents:
-            content_string = doc.get("content")
             
+            # --- THIS IS THE NEW LOGIC ---
+            # Priority 1: Use the pre-formatted text (which has the schedule) if it exists.
+            content_string = doc.get("formatted_text")
+
+            # Priority 2: If no formatted_text, use the existing 'content' field.
             if not content_string:
-                # Check the document's type to generate appropriate content
+                content_string = doc.get("content")
+
+            # Priority 3: If neither exists, generate a summary string as a fallback.
+            if not content_string:
                 data_type = doc.get("data_type")
                 name = doc.get("full_name", "N/A")
-                stud_id = doc.get("student_id", "N/A")
-                course = doc.get("course", "N/A")
-                year = doc.get("year", "N/A")
 
                 if data_type == "student_grades":
-                    # Create a unique content string for grade documents
                     gwa = doc.get("gwa", "N/A")
                     content_string = (
-                        f"Grade summary for {name} ({stud_id}). "
-                        f"Program: {course}, Year: {year}. GWA: {gwa}."
+                        f"Grade summary for {name}. "
+                        f"Program: {doc.get('course', 'N/A')}, Year: {doc.get('year', 'N/A')}. GWA: {gwa}."
                     )
+                
+                elif data_type == "teaching_faculty":
+                    pos = doc.get("position", "N/A")
+                    dept = doc.get("department", "N/A")
+                    content_string = (
+                        f"Faculty Profile for {name}. "
+                        f"Position: {pos}, Department: {dept}."
+                    )
+                
+                elif data_type == "teaching_faculty_schedule":
+                    dept = doc.get("department", "N/A")
+                    subjects = doc.get("total_subjects", "N/A")
+                    content_string = (
+                        f"Faculty Schedule for {name}. "
+                        f"Department: {dept}, Total Subjects: {subjects}."
+                    )
+                
                 else:
                     # Fallback to the original student profile content string
+                    stud_id = doc.get("student_id", "N/A")
+                    course = doc.get("course", "N/A")
+                    year = doc.get("year", "N/A")
                     section = doc.get("section", "N/A")
                     department = doc.get("department", "N/A")
                     content_string = (
@@ -71,9 +94,9 @@ class MongoCollectionAdapter:
                         f"Program: {course}, Year: {year}, Section: {section}. "
                         f"Department: {department}."
                     )
+            # --- END OF NEW LOGIC ---
             
             docs_list.append(content_string)
-            # --- END OF FIX ---
 
             metadata = {k: (str(v) if k != "_id" else str(v))
             for k, v in doc.items()
@@ -81,7 +104,6 @@ class MongoCollectionAdapter:
             metas_list.append(metadata)
 
         return {"documents": [docs_list], "metadatas": [metas_list], "ids": [ids_list]}
-    
 
     def peek(self, limit: int = 10) -> Dict:
         """Mimics ChromaDB's .peek() method by calling .get()."""

@@ -156,13 +156,17 @@ class PolicyEngine:
         }
     
 
+
+    # In backend/utils/ai_core/policy_engine.py
+    # --- REPLACE THE ENTIRE 'is_query_vague_nlp' METHOD WITH THIS ---
+
     def is_query_vague_nlp(self, query: str) -> bool:
         """
-        [NEW] Uses SpaCy's dependency parser to check for "dangling nouns."
+        [UPGRADED] Uses SpaCy's dependency parser to check for "dangling nouns."
         
-        This detects queries that use a target-required noun (like 'adviser'
-        or 'schedule') without specifying *which one* (e.g., "adviser of BSCS"
-        or "BSCS schedule"). This is far more robust than a fixed list.
+        This version now checks the token's entire 'subtree' (children,
+        grandchildren, etc.) to find a saving modifier, making it robust
+        against phrases like "adviser *for BSCS*".
         """
         if not self.nlp:
             return False # Safety check if SpaCy isn't loaded
@@ -170,7 +174,6 @@ class PolicyEngine:
         doc = self.nlp(query)
 
         # Nouns that MUST have a target to be unambiguous
-        # We use lemmas to catch plurals (e.g., "schedules" -> "schedule")
         TARGET_REQUIRED_NOUNS = {
             "adviser",
             "schedule",
@@ -182,28 +185,40 @@ class PolicyEngine:
         
         # Modifiers that "save" a noun from being vague
         # pobj: "adviser *of BSCS*" (prepositional object)
-        # dobj: "get *the schedule*" (direct object, if the noun isn't the object)
+        # dobj: "get *the schedule*" (direct object)
         # compound: "*BSCS* schedule" (compound noun)
         # nsubj: "*Maria's* schedule" (nominal subject)
-        SAVING_MODIFIERS = {"pobj", "dobj", "compound", "nsubj", "poss"}
+        # poss: "Maria's schedule" (possessive)
+        # pcomp: (prepositional complement)
+        # appos: (appositional modifier, e.g., "Mr. Smith, the adviser")
+        SAVING_MODIFIERS = {"pobj", "dobj", "compound", "nsubj", "poss", "pcomp", "appos"}
 
         for token in doc:
             if token.lemma_ in TARGET_REQUIRED_NOUNS:
-                # The noun is in our list. Now, check if it has any "saving" modifiers.
+                # The noun is in our list. Now, check if it has any "saving" modifiers
+                # anywhere in its subtree (children, grandchildren, etc.)
+                
                 has_modifier = False
-                for child in token.children:
-                    if child.dep_ in SAVING_MODIFIERS:
-                        has_modifier = True
-                        break
+                
+                # --- THIS IS THE FIX ---
+                # We check `token.subtree` instead of just `token.children`
+                for descendant in token.subtree:
+                    if descendant.dep_ in SAVING_MODIFIERS:
+                        # Ensure the modifier is not the token itself
+                        if descendant.i != token.i:
+                            has_modifier = True
+                            self.debug(f"NLP Vague Check: Noun '{token.text}' is saved by descendant '{descendant.text}' ({descendant.dep_}).")
+                            break
+                # --- END OF FIX ---
                 
                 # This is a dangling, ambiguous noun.
                 if not has_modifier:
-                    print(f"NLP Vague Check: Found dangling noun '{token.text}'. Flagging as ambiguous.")
+                    self.debug(f"NLP Vague Check: Found dangling noun '{token.text}'. Flagging as ambiguous.")
                     return True
         
         # No dangling nouns found
+        self.debug("NLP Vague Check: No dangling nouns found. Query is not vague.")
         return False
-
 
 
     def get_intent(self, query: str) -> Optional[str]:

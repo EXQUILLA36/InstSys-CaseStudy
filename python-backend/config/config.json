@@ -1,5 +1,5 @@
 {
-  "execution_mode": "online",
+  "execution_mode": "offline",
   "chat_settings": {
     "history_file": "config/chat_history.json",
     "max_history_turns": 10

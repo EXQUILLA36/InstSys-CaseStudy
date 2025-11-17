@@ -95,17 +95,23 @@ class TrainingSystem:
             print(f"CRITICAL: Failed to log query to MongoDB: {e}")
             print(f"Failed Log Entry: {record}")
 
+
+
+            # In backend/utils/ai_core/training.py
+    
+    # --- REPLACE THIS ENTIRE METHOD ---
+
     def get_training_insights(self) -> str:
         """
-        [UPGRADED] Generates a summary by running an efficient aggregation query on the MongoDB log collection,
-        now including average performance timings.
+        [UPGRADED] Generates a summary by running efficient aggregation queries on the MongoDB log,
+        now including average performance timings AND plan-based success/failure analysis.
         """
         total_queries = self.log_collection.count_documents({})
         if total_queries == 0:
             return "No training data recorded yet in the database."
 
-        # Use an aggregation pipeline to count outcomes AND average timings
-        pipeline = [
+        # === Pipeline 1: Count outcomes AND average timings (Existing) ===
+        pipeline_outcomes = [
             {
                 "$group": {
                     "_id": "$outcome",
@@ -118,12 +124,12 @@ class TrainingSystem:
             },
             {"$sort": {"count": -1}}
         ]
-        results = list(self.log_collection.aggregate(pipeline))
+        results_outcomes = list(self.log_collection.aggregate(pipeline_outcomes))
         
-        outcome_counts = {item['_id']: item['count'] for item in results}
+        outcome_counts = {item['_id']: item['count'] for item in results_outcomes}
         
-        # --- Calculate overall average timings (since $group was by outcome) ---
-        pipeline_all = [
+        # === Pipeline 2: Calculate overall average timings (Existing) ===
+        pipeline_all_avg = [
             {
                 "$group": {
                     "_id": None,
@@ -134,7 +140,7 @@ class TrainingSystem:
                 }
             }
         ]
-        avg_times_data = list(self.log_collection.aggregate(pipeline_all))
+        avg_times_data = list(self.log_collection.aggregate(pipeline_all_avg))
         
         timing_report = "  No timing data available."
         if avg_times_data:
@@ -146,6 +152,61 @@ class TrainingSystem:
                 f"  - Avg Synthesizer: {times.get('avg_synth', 0):.2f}s"
             )
         
+        # === Pipeline 3: NEW! Analyze Plan Success/Failure ===
+        # We group by the 'plan_hash' to see which plans are used most and which fail most.
+        pipeline_plans = [
+            {
+                "$match": {
+                    "plan_hash": {"$ne": None}  # Only analyze queries that have a plan hash
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$plan_hash",
+                    "plan_example": {"$first": "$plan"}, # Get an example of the plan
+                    "total_runs": {"$sum": 1},
+                    "successes": {
+                        "$sum": {
+                            "$cond": [
+                                {"$regexMatch": {"input": "$outcome", "regex": "^SUCCESS"}},
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    "failures": {
+                        "$sum": {
+                            "$cond": [
+                                {"$regexMatch": {"input": "$outcome", "regex": "^FAIL"}},
+                                1,
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "plan_example": 1,
+                    "total_runs": 1,
+                    "success_rate": {
+                        "$multiply": [
+                            {"$divide": ["$successes", "$total_runs"]},
+                            100
+                        ]
+                    },
+                    "failure_rate": {
+                        "$multiply": [
+                            {"$divide": ["$failures", "$total_runs"]},
+                            100
+                        ]
+                    }
+                }
+            },
+            {"$sort": {"total_runs": -1}}
+        ]
+        plan_analytics = list(self.log_collection.aggregate(pipeline_plans))
+
         # --- Build the report string ---
         direct_success_count = outcome_counts.get("SUCCESS_DIRECT", 0)
         direct_success_rate = (direct_success_count / total_queries) * 100 if total_queries > 0 else 0
@@ -161,18 +222,42 @@ class TrainingSystem:
         ]
         
         outcome_descriptions = {
-            "SUCCESS_DIRECT": "Primary tool succeeded.",
-            "SUCCESS_FALLBACK": "Primary tool failed, but fallback search found results.",
-            "FAIL_EMPTY": "Tool and fallback ran correctly but found no data.",
+            "SUCCESS_DIRECT": "Primary tool(s) succeeded.",
+            "SUCCESS_FALLBACK": "Primary tool(s) failed, but fallback search found results.",
+            "FAIL_EMPTY": "Tool(s) ran correctly but found no data.",
             "FAIL_PLANNER": "AI Planner failed to choose a tool.",
             "FAIL_EXECUTION": "An unexpected error occurred during tool execution.",
             "FAIL_UNKNOWN": "An unknown failure occurred.",
-            "SUCCESS_CONVERSATIONAL": "A conversational query was handled directly."
+            "SUCCESS_CONVERSATIONAL": "A conversational query was handled directly.",
+            "FAIL_AMBIGUOUS": "Plan stopped due to ambiguity (e.g., multiple people found)."
         }
 
         for outcome, count in outcome_counts.items():
             percentage = (count / total_queries) * 100
             description = outcome_descriptions.get(outcome, "No description.")
             insights.append(f"   - {outcome}: {count} queries ({percentage:.1f}%) - {description}")
+        
+        # --- Add the NEW plan analytics to the report ---
+        insights.append("\nPlan Performance (Top 5 Most Used):")
+        if not plan_analytics:
+            insights.append("  No plan analytics available yet.")
+        else:
+            for i, plan_stat in enumerate(plan_analytics[:5]):
+                # Get the first tool name to make the report readable
+                try:
+                    first_tool = plan_stat['plan_example']['plan'][0]['tool_call']['tool_name']
+                    if 'plan' in plan_stat['plan_example']['plan'][1]['tool_call']['tool_name']:
+                        plan_name = f"{first_tool} (1-step)"
+                    else:
+                        plan_name = f"{first_tool} -> ..."
+                except Exception:
+                    plan_name = f"Plan Hash: {plan_stat['_id'][:7]}..."
+                
+                insights.append(
+                    f"  {i+1}. {plan_name}\n"
+                    f"     - Runs: {plan_stat['total_runs']}, "
+                    f"Success: {plan_stat.get('success_rate', 0):.1f}%, "
+                    f"Fail: {plan_stat.get('failure_rate', 0):.1f}%"
+                )
             
         return "\n".join(insights)

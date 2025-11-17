@@ -142,6 +142,7 @@ class AIAnalyst:
         self.all_doc_types = self._get_unique_document_types()
         self.policy_engine = PolicyEngine(known_programs=self.all_programs)
         self.training_system = TrainingSystem(mongo_db=self.mongo_db)
+        self._build_role_expansion_map()
             
         self.dynamic_examples_collection = self.mongo_db["dynamic_examples"]
         # Ensure a text index exists for efficient searching. This command is idempotent and safe to run on startup.
@@ -168,6 +169,7 @@ class AIAnalyst:
             "answer_question_about_person": self.answer_question_about_person,
             "get_student_grades": self.get_student_grades,
             "query_curriculum": self.query_curriculum,
+            "request_clarification": self.request_clarification
         }
 
         self.METADATA_FIELD_BLACKLIST = {
@@ -218,6 +220,66 @@ class AIAnalyst:
     # backend/utils/ai_core/analyst.py
 
     # --- REPLACE THIS ENTIRE METHOD ---
+
+
+    # --- ADD THIS ENTIRE NEW METHOD ---
+
+    def _build_role_expansion_map(self):
+        """
+        [NEW] Runs once on startup to dynamically build a map
+        that translates generic roles (like 'staff') into all
+        specific positions found in the database.
+        """
+        self.debug("Building dynamic role expansion map...")
+        self.role_expansion_map = {
+            "faculty": set(),
+            "admin": set(),
+            "non_teaching": set(),
+            "staff": set()
+        }
+        
+        # We query all staff collections
+        all_staff_profiles = self.search_database(collection_filter=self.staff_collections)
+        
+        if not all_staff_profiles:
+            self.debug("...no staff profiles found to build map.")
+            return
+
+        for doc in all_staff_profiles:
+            meta = doc.get("metadata", {})
+            pos = meta.get("position")
+            f_type = meta.get("faculty_type")
+            
+            if not pos:
+                continue
+
+            # Add specific positions to the correct category
+            if f_type == "teaching":
+                self.role_expansion_map["faculty"].add(pos)
+            elif f_type == "admin":
+                self.role_expansion_map["admin"].add(pos)
+            elif f_type == "non_teaching":
+                self.role_expansion_map["non_teaching"].add(pos)
+
+        # "staff" is a superset of admin and non-teaching
+        self.role_expansion_map["staff"] = (
+            self.role_expansion_map["admin"].union(
+            self.role_expansion_map["non_teaching"])
+        )
+        
+        # "faculty" often includes the deans
+        self.role_expansion_map["faculty"].update(
+            pos for pos in self.role_expansion_map["admin"] 
+            if "dean" in pos.lower()
+        )
+        
+        # Convert sets to lists for JSON serialization in queries
+        for k in self.role_expansion_map:
+            self.role_expansion_map[k] = list(self.role_expansion_map[k])
+            
+        self.debug(f"...Role map built: {self.role_expansion_map}")
+
+
     def _build_dynamic_collection_groups(self):
         """
         [CORRECTED] Dynamically categorizes all loaded collections by their prefix
@@ -325,7 +387,7 @@ class AIAnalyst:
             session_doc.setdefault("structured_context", {
                 "current_topic": "None.",
                 "active_filters": {},
-                "mentioned_entities": []
+                "active_person_entity": None
             })
             # --- END OF RECOMMENDED FIX ---
 
@@ -340,9 +402,9 @@ class AIAnalyst:
                 "chat_history": [],
                 "conversation_summary": "",
                 "structured_context": {
-                "current_topic": "None.",
-                "active_filters": {},
-                "mentioned_entities": []
+                    "current_topic": "None.",
+                    "active_filters": {},
+                    "active_person_entity": None
                 },
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc)
@@ -431,65 +493,45 @@ class AIAnalyst:
         # --- NEW: Coref to parameters (no text rewriting) ----------------------------
     def _coref_to_params(self, user_text: str, session: dict) -> dict:
         """
-        Resolve pronouns to a single person if unambiguous within the *current topic*.
-        Returns params like {"person_name": "Ruiz, Erin"} or {} if ambiguous.
+        [UPGRADED] Resolve pronouns (he/she/his/her) to the
+        'active_person_entity' from the session's structured context.
         """
         import re
 
         text = (user_text or "").strip().lower()
-        # Only trigger if a clear pronoun pattern exists
-        if not re.search(r"\b(he|she|his|her|their|them)\b", text):
+        # Only trigger if a clear singular pronoun exists
+        if not re.search(r"\b(he|she|his|her)\b", text):
             return {}
 
-        # Get last mentioned person in *this topic*
-        # Get last mentioned person in *this topic*
+        # Get the single, topic-aware active person
         ctx = session.get("structured_context", {}) or {}
-        current_topic = (ctx.get("current_topic") or "None.").strip().lower()
+        active_person = ctx.get("active_person_entity")
 
-        # Get entities from history that match the current topic
-        topic_entities = []
-        current_tid = self._current_topic_id(session)
-        history = session.get("chat_history", []) or []
-
-        # This logic is a bit complex, but it finds entities
-        # mentioned in the *assistant's* last responses on the *same topic*
-        # This is a proxy for "what did we just talk about?"
-        for msg in reversed(history):
-            if msg.get("topic_id") == current_tid and msg.get("role") == "assistant":
-                # Find names in the assistant's last response
-                # This is a heuristic; a better way is to log entities with the history
-                # But for now, let's stick to the existing session structure
-                pass # NOTE: This part is hard without changing session structure.
-
-        # --- SIMPLER, GOOD-ENOUGH FIX ---
-        # Let's just use the existing mentioned_entities list, as it's
-        # updated by _add_entity_to_session which is topic-agnostic.
-        # Your original logic is fine, let's stick with it.
-        entities = session.get("structured_context", {}).get("mentioned_entities", []) or []
-        # Keep only "Lastname, Firstname" looking items
-        candidates = [e for e in entities if "," in e]
-        person = candidates[-1].strip() if candidates else None
-
-        if not person:
+        if not active_person:
+            self.debug("-> Pronoun detected, but no 'active_person_entity' in context. Cannot resolve.")
             return {}
 
-        # Simple number/gender guard (optional): only resolve singular pronouns
-        if re.search(r"\b(their|them)\b", text):
-            return {}  # ambiguous plural
-
-        return {"person_name": person}
-
-
-
+        self.debug(f"-> Pronoun detected. Resolving 'he/she/his/her' to '{active_person}'.")
+        return {"person_name": active_person}
     
 
+
+
+
+    # --- REPLACE THIS ENTIRE METHOD ---
     def _summarize_conversation(self, session_id: str):
-        # --- THIS ENTIRE FUNCTION IS REPLACED ---
+        """
+        [UPGRADED] Updates the structured context using an LLM.
+        This version passes the full context to the prompt, which
+        is instructed to preserve state flags like `clarification_pending`.
+        """
         self.debug(f"Updating structured context for session: {session_id}")
         session = self._get_or_create_session(session_id)
         
-        if len(session["chat_history"]) < 2: return
+        if len(session["chat_history"]) < 2:
+            return
 
+        # Pass the ENTIRE current context, not just a subset
         previous_context_str = json.dumps(session.get("structured_context", {}), indent=2)
         
         latest_exchange = "\n".join([
@@ -497,7 +539,8 @@ class AIAnalyst:
             f"Assistant: {session['chat_history'][-1]['content']}"
         ])
 
-        prompt = PROMPT_TEMPLATES["conversation_summarizer"].format(
+        # Use the new, state-aware summarizer prompt
+        prompt = PROMPT_TEMPLATES["conversation_summarizer_v2"].format(
             context=previous_context_str,
             latest_exchange=latest_exchange
         )
@@ -509,68 +552,24 @@ class AIAnalyst:
             phase="planner"
         )
 
-        new_context = self._repair_json(response_str)
-        if new_context and isinstance(new_context, dict):
-            session["structured_context"] = new_context
+        new_context_data = self._repair_json(response_str)
+        
+        if new_context_data and isinstance(new_context_data, dict):
+            # This is the fix: Update the session's context object
+            # with the new data, which preserves flags like `clarification_pending`.
+            session["structured_context"].update(new_context_data)
             session["updated_at"] = datetime.now(timezone.utc)
+            
+            # Save the entire, updated session object
             self.sessions_collection.update_one(
                 {"session_id": session_id},
-                {"$set": {
-                    "structured_context": new_context,
-                    "updated_at": session["updated_at"]
-                }},
+                {"$set": session}, # Save the whole session
                 upsert=True
             )
-            self.debug(f"New structured context for {session_id}: {new_context}")
+            self.debug(f"New structured context for {session_id}: {session['structured_context']}")
+        else:
+            self.debug(f"Summarizer returned invalid JSON: {response_str}")
 
-
-
-
-
-            
-
-
-    # Add this new method anywhere inside the AIAnalyst class in AI.py
-
-    def _add_entity_to_session(self, session_id: str, entity_name: str):
-        """
-        Adds a new entity to the session's memory and keeps the list trimmed.
-        """
-        session = self._get_or_create_session(session_id) or {}
-
-        # Ensure the list exists (handles old/new sessions without the key)
-        if "mentioned_entities" not in session or not isinstance(session["mentioned_entities"], list):
-            session["mentioned_entities"] = []
-
-        # Move existing entity to the end to reflect most-recent mention
-        if entity_name in session["mentioned_entities"]:
-            try:
-                session["mentioned_entities"].remove(entity_name)
-            except ValueError:
-                pass  # extremely defensive; shouldn't happen
-        session["mentioned_entities"].append(entity_name)
-
-        # Keep only the last 5 mentioned entities to keep the list relevant
-        if len(session["mentioned_entities"]) > 5:
-            session["mentioned_entities"] = session["mentioned_entities"][-5:]
-
-        # Persist the change to the database
-# Update the timestamp
-        session["updated_at"] = datetime.now(timezone.utc)
-
-        # --- THIS IS THE FIX ---
-        # We must remove the _id field from the session object before
-        # using it in $set, as _id is immutable.
-        session.pop("_id", None)
-        # --- END OF FIX ---
-
-        # Save the entire updated session object to MongoDB
-        self.sessions_collection.update_one(
-            {"session_id": session_id},
-            {"$set": session},
-            upsert=True  # Creates the document if it doesn't exist
-        )
-        self.debug(f"Updated entity memory for {session_id}: {session['mentioned_entities']}")
 
 
 
@@ -971,18 +970,58 @@ class AIAnalyst:
 
     # --- REPLACE THE ENTIRE get_student_grades METHOD WITH THIS ---
 
+
+    # --- ADD THIS ENTIRE NEW METHOD ---
+    def _run_query_triage(self, query: str, session: dict) -> dict:
+        """
+        [NEW] Uses a "mini-LLM" call to classify the user's query *before*
+        the main planner. Replaces all old policy_engine ambiguity checks.
+        """
+        self.debug("Running Query Triage (Mini-LLM)...")
+        context = session.get("structured_context", {})
+        
+        triage_prompt = PROMPT_TEMPLATES["triage_prompt"].format(
+            current_topic=context.get("current_topic", "None."),
+            clarification_pending=context.get("clarification_pending", False),
+            original_ambiguous_query=context.get("original_ambiguous_query", ""),
+            query=query
+        )
+        
+        # Use the fast planner LLM for this
+        triage_raw = self.planner_llm.execute(
+            system_prompt="You are a triage AI that only outputs valid JSON.",
+            user_prompt=triage_prompt,
+            json_mode=True,
+            history=[], # Triage should be context-light
+            phase="planner"
+        )
+        
+        triage_json = self._repair_json(triage_raw)
+        
+        if not triage_json or "intent" not in triage_json:
+            self.debug(f"Triage FAILED. Received: {triage_raw}. Defaulting to VALID_NEW_QUERY.")
+            return {"intent": "VALID_NEW_QUERY"}
+            
+        self.debug(f"Triage Result: {triage_json}")
+        return triage_json
+    
+
+    # --- REPLACE THE ENTIRE get_student_grades METHOD WITH THIS ---
+
     def get_student_grades(self, student_name: str = None, program: str = None, year_level: int = None, section: str = None) -> List[dict]:
         """
-        Tool (UPGRADED): Finds grade documents for a specific student by name, or for a group of students
-        by program, year level, and/or section. Can also retrieve all grades if no filters are provided.
+        Tool (UPGRADED V3 - Optimized): Finds grade documents and the *specific* students they belong to.
+        - If a student_name is given, it works as before.
+        - If a group (program/year/section) is given, it searches for *grades* first,
+          then retrieves *only* the profiles for students who had those grades.
         """
-        self.debug(f"Running grade tool for name='{student_name}', program='{program}', year='{year_level}', section='{section}'")
+        self.debug(f"Running OPTIMIZED grade tool for name='{student_name}', program='{program}', year='{year_level}', section='{section}'")
         
         # Normalize year_level=0 to None for broader matching
         if year_level == 0:
             year_level = None
 
-        # Priority 1: Search by a specific student's name (no change here)
+        # --- Priority 1: Search by Name (This logic is fine and can stay) ---
         if student_name:
             self.debug(f"-> Prioritizing search by name: {student_name}")
             entity = self.resolve_person_entity(name=student_name)
@@ -990,46 +1029,58 @@ class AIAnalyst:
                 return [{"status": "error", "summary": f"Could not find a student named '{student_name}'."}]
             
             student_docs = entity["primary_document"]
-            student_ids = [doc.get("metadata", {}).get("student_id") for doc in student_docs if doc.get("metadata", {}).get("student_id")]
+            # Get all unique student IDs from all resolved documents (profiles, schedules, etc.)
+            student_ids = set()
+            for doc in student_docs:
+                s_id = doc.get("metadata", {}).get("student_id")
+                if s_id:
+                    student_ids.add(s_id)
             
             if not student_ids:
                 return student_docs + [{"status": "empty", "summary": f"Found student(s) named '{student_name}' but they are missing student IDs needed to find grades."}]
             
-            grade_docs = self.search_database(filters={"student_id": {"$in": student_ids}}, collection_filter=self.grades_collections)
+            grade_docs = self.search_database(filters={"student_id": {"$in": list(student_ids)}}, collection_filter=self.grades_collections)
             if not grade_docs:
                 return student_docs + [{"status": "empty", "summary": f"Found student(s) named '{student_name}' but could not find any grade information for them."}]
             
             return student_docs + grade_docs
 
-        # --- THIS IS THE MODIFIED BLOCK ---
-        # Priority 2: Search by a group (program, year, and/or section)
+        # --- Priority 2: Optimized Search by Group ---
         if program or year_level or section:
-            self.debug(f"-> Searching for group: program={program}, year_level={year_level}, section={section}")
-            student_filters = {}
-            if program:
-                student_filters['program'] = program
-            if year_level:
-                student_filters['year_level'] = year_level
-            if section:
-                student_filters['section'] = section  # <-- THIS IS THE NEW LINE
-
-            # find_people already accepts 'section', so we can pass the filters directly
-            student_docs = self.find_people(**student_filters) 
-            if not student_docs or "status" in (student_docs[0] or {}).get("metadata", {}):
-                return [{"status": "empty", "summary": f"I couldn't find any students matching those criteria."}]
+            self.debug(f"-> OPTIMIZED: Searching 'grades' collection *first* for group: program={program}, year_level={year_level}, section={section}")
             
-            student_ids = [doc.get("metadata", {}).get("student_id") for doc in student_docs if doc.get("metadata", {}).get("student_id")]
-            if not student_ids:
-                return [{"status": "empty", "summary": "Found students, but they are missing IDs needed to find grades."}]
+            # 1. Build filters for the GRADES collection
+            # (The log confirms grades_ccs has course, year, and section fields)
+            grade_filters = {}
+            if program: grade_filters['program'] = program # Assumes 'program' or alias exists in grades
+            if year_level: grade_filters['year_level'] = year_level # Assumes 'year_level' or alias exists
+            if section: grade_filters['section'] = section # Assumes 'section' or alias exists
 
-            grade_filters = {"student_id": {"$in": student_ids}}
+            # 2. Search for the grade documents first
             grade_docs = self.search_database(filters=grade_filters, collection_filter=self.grades_collections)
             
-            if not grade_docs:
-                return student_docs + [{"status": "empty", "summary": "Could not find any grade information for the specified students."}]
+            if not grade_docs or (grade_docs and "status" in (grade_docs[0] or {})):
+                return [{"status": "empty", "summary": f"I couldn't find any grade records for students matching those criteria."}]
+            
+            # 3. Get the *specific* student IDs from the grades found
+            student_ids_with_grades = list(set(
+                doc.get("metadata", {}).get("student_id") 
+                for doc in grade_docs 
+                if doc.get("metadata", {}).get("student_id")
+            ))
+            
+            if not student_ids_with_grades:
+                # This is a safeguard
+                return grade_docs + [{"status": "empty", "summary": "Found grade records, but they are missing student IDs, so I cannot find who they belong to."}]
+            
+            # 4. Now, find *only* the profiles for those specific students
+            profile_filters = {"student_id": {"$in": student_ids_with_grades}}
+            student_docs = self.search_database(filters=profile_filters, collection_filter=self.student_collections)
 
+            # 5. Return the highly-focused list
+            self.debug(f"-> Found {len(grade_docs)} grade docs and {len(student_docs)} matching profiles. Returning focused list.")
             return student_docs + grade_docs
-        # --- END OF MODIFIED BLOCK ---
+        # --- END OF OPTIMIZED BLOCK ---
         
         # Priority 3: No filters provided (no change here)
         if not student_name and not program and not year_level and not section:
@@ -1041,9 +1092,10 @@ class AIAnalyst:
 
         return [{"status": "error", "summary": "To get grades, please provide a specific student's name, a program, a year level, or a section."}]
 
-# --- END OF REPLACEMENT ---
 
-    
+
+    # In backend/utils/ai_core/analyst.py
+    # --- REPLACE THE ENTIRE 'answer_question_about_person' METHOD WITH THIS ---
 
     def answer_question_about_person(self, person_name: str, question: str) -> List[dict]:
         """
@@ -1074,16 +1126,27 @@ class AIAnalyst:
             # Find related documents (schedule, grades) based on person type
             if "student" in source_collection:
                 student_id = meta.get("student_id")
-                schedule_filters = {k: v for k, v in {"program": meta.get("program"), "year_level": meta.get("year_level"), "section": meta.get("section")}.items() if v}
+                
+                # --- THIS IS THE FIX ---
+                # Use the alias-aware logic to find the student's group
+                schedule_filters = {
+                    "program": meta.get("program") or meta.get("course"),
+                    "year_level": meta.get("year_level") or meta.get("year"),
+                    "section": meta.get("section")
+                }
+                # Remove keys that are None or empty
+                schedule_filters = {k: v for k, v in schedule_filters.items() if v}
+                # --- END OF FIX ---
+
                 if schedule_filters:
-                    person_docs.extend(self.search_database(filters=schedule_filters, collection_filter=self.student_schedule_collections)) # <-- FIX
+                    person_docs.extend(self.search_database(filters=schedule_filters, collection_filter=self.student_schedule_collections))
                 if student_id:
-                    person_docs.extend(self.search_database(filters={"student_id": student_id}, collection_filter=self.grades_collections)) # <-- FIX
+                    person_docs.extend(self.search_database(filters={"student_id": student_id}, collection_filter=self.grades_collections))
             
             elif "faculty" in source_collection:
                 schedule_filters = {"$or": [{"adviser": {"$in": aliases}}, {"staff_name": {"$in": aliases}}]}
-                person_docs.extend(self.search_database(filters=schedule_filters, collection_filter=self.faculty_schedule_collections)) # <-- FIX
-                person_docs.extend(self.search_database(filters=schedule_filters, collection_filter=self.staff_schedule_collections)) # <-- FIX
+                person_docs.extend(self.search_database(filters=schedule_filters, collection_filter=self.faculty_schedule_collections))
+                person_docs.extend(self.search_database(filters=schedule_filters, collection_filter=self.staff_schedule_collections))
 
         self.debug(f"-> Collected {len(person_docs)} total documents for the QA context.")
 
@@ -1094,7 +1157,7 @@ class AIAnalyst:
         }, indent=2, ensure_ascii=False)
         
         # Step 4: Call the Synthesizer LLM to perform the specific QA task
-        qa_user_prompt = f"Based ONLY on the Factual Documents provided, please answer the following question concisely.\n\nFactual Documents:\n{context_for_qa}\n\nQuestion: {question}"
+        qa_user_prompt = f"Based ONLY on the Factual Documents provided, please answer the following question concisely.\n\Factual Documents:\n{context_for_qa}\n\nQuestion: {question}"
         
         specific_answer = self.synth_llm.execute(
             system_prompt="You are a helpful assistant that answers specific questions based ONLY on the provided Factual Documents. Do not use any outside knowledge.",
@@ -1106,25 +1169,28 @@ class AIAnalyst:
         return [
             {"source_collection": "qa_answer", "content": specific_answer, "metadata": {"question": question}}
         ] + person_docs
-    
 
     # backend/utils/ai_core/analyst.py
 
-    # backend/utils/ai_core/analyst.py
+
+
+    # --- REPLACE THE ENTIRE find_people METHOD WITH THIS (V6 - Dynamic Expansion) ---
 
     def find_people(self, name: str = None, position: str = None, program: str = None, year_level: int = None, section: str = None, department: str = None, employment_status: str = None, n_results: int = 1000) -> List[dict]:
         """
-        Tool (Unified & DYNAMIC V4 - FINAL): A powerful, single tool to find any person or group.
-        - Uses 'position' to match the database schema.
-        - Uses the dynamic 'all_generic_roles' list to intelligently
-          skip the position filter when a generic category (like "staff") is used.
+        Tool (Unified & DYNAMIC V6 - Dynamic Role Expansion):
+        A powerful, single tool to find any person or group.
+        
+        [NEW] This version is "AI-Friendly." It uses a dynamically generated
+        'self.role_expansion_map' to translate generic AI queries (like "admin")
+        into a specific list of database positions.
         """
         try:
             n_results = int(n_results)
         except (ValueError, TypeError):
             n_results = 1000
 
-        self.debug(f"Running DYNAMIC V4 tool: find_people with params: name='{name}', position='{position}', program='{program}', dept='{department}'")
+        self.debug(f"Running DYNAMIC V6 (Dynamic Expansion) tool: find_people with params: name='{name}', position='{position}', program='{program}', dept='{department}'")
         filters = {}
         collection_filter = None
         
@@ -1134,14 +1200,14 @@ class AIAnalyst:
 
         pos_str = str(position).lower().strip() if position else ""
 
-        # --- WILDCARD SEARCH (DYNAMIC) ---
+        # --- WILDCARD SEARCH ---
         if not any([name, position, program, year_level, section, department, employment_status]):
             self.debug(f"-> No parameters provided. Searching ALL people collections: {self.all_people_collections}")
             return self.search_database(query_text="*", collection_filter=self.all_people_collections, n_results=n_results)
 
         # --- INTELLIGENT COLLECTION ROUTING ---
         is_student_query = (
-            'student' in pos_str or
+            pos_str == 'student' or
             program or 
             year_level or 
             section
@@ -1158,23 +1224,31 @@ class AIAnalyst:
                 return self.search_database(query_text="*", collection_filter=self.student_collections)
         
         else: # This handles faculty, admin, staff, registrar, librarian, etc.
-            self.debug(f"-> Query identified as a FACULTY/STAFF/ADMIN search. Using: {self.staff_collections}")
             collection_filter = self.staff_collections
             
-            # --- THIS IS THE FINAL, CORRECT LOGIC ---
-            # We check if the 'position' the Planner sent is GENERIC or SPECIFIC
-            if position and (pos_str not in self.all_generic_roles):
-                # This is SPECIFIC (e.g., "Librarian", "Professor").
+            # --- THIS IS THE NEW DYNAMIC ROLE EXPANSION LOGIC ---
+            if position and pos_str in self.role_expansion_map:
+                # AI sent a generic word (e.g., "admin"). Expand it to the dynamic list.
+                expanded_roles = self.role_expansion_map.get(pos_str)
+                
+                if expanded_roles:
+                    self.debug(f"-> Detected GENERIC position '{position}'. Dynamically expanding to: {expanded_roles}")
+                    # Create a regex-friendly list for the $in query to be case-insensitive
+                    role_regex_list = [re.compile(f"^{re.escape(role)}$", re.IGNORECASE) for role in expanded_roles]
+                    filters['position'] = {'$in': role_regex_list}
+                else:
+                    # AI sent a generic word, but our map is empty. Fallback.
+                    self.debug(f"-> Generic position '{position}' has no roles in map. Applying as specific filter.")
+                    filters['position'] = {'$regex': position, '$options': 'i'}
+
+            elif position:
+                # AI sent a SPECIFIC title (e.g., "Professor").
                 self.debug(f"-> Applying SPECIFIC position filter for: {position}")
                 if isinstance(position, list):
                     filters['position'] = {'$in': [re.compile(p, re.IGNORECASE) for p in position]}
                 elif isinstance(position, str):
-                    filters['position'] = {'$regex': position, '$options': 'i'}
-            elif position:
-                # This is GENERIC (e.g., "staff", "admin", "library").
-                # We SKIP the position filter to get EVERYONE in the department.
-                self.debug(f"-> Detected GENERIC position '{position}'. Filtering by collection/dept, not by position title.")
-            # --- END OF FINAL LOGIC ---
+                    filters['position'] = {'$regex': f"^{re.escape(position)}$", '$options': 'i'}
+            # --- END OF NEW LOGIC ---
                 
             if department and department.lower() != 'all':
                 filters['department'] = department
@@ -1184,12 +1258,16 @@ class AIAnalyst:
             if not filters and not name and position:
                  return self.search_database(query_text="*", collection_filter=self.staff_collections)
 
-        # --- NAME SEARCH LOGIC ---
+        # --- NAME SEARCH LOGIC (No changes needed) ---
         if name:
             self.debug(f"-> Name provided. Using robust entity resolution for '{name}'.")
-            entity = self.resolve_person_entity(name=name)
+            # Use V5.4 (Strict) for accurate name matching
+            entity = self.resolve_person_entity(name=name) 
+            
             if entity and entity.get("aliases"):
-                filters['full_name'] = {"$in": entity["aliases"]}
+                # We build a regex list to be case-insensitive
+                name_regex_list = [re.compile(re.escape(alias), re.IGNORECASE) for alias in entity["aliases"]]
+                filters['full_name'] = {"$in": name_regex_list}
                 
                 if not any([position, program, year_level, section, department]):
                     collection_filter = self.all_people_collections
@@ -1202,54 +1280,136 @@ class AIAnalyst:
         
         
         self.debug(f"-> Executing search on collections: '{collection_filter}' with filters: {filters}")
-        return self.search_database(filters=filters, collection_filter=collection_filter, n_results=n_results)
-
-    
-# --- REPLACE YOUR OLD get_person_schedule WITH THIS ---
-
-# --- REPLACE YOUR CURRENT get_person_schedule METHOD WITH THIS ---
-
-# --- REPLACE YOUR CURRENT get_person_schedule METHOD WITH THIS V5 ---
-
-# --- REPLACE YOUR CURRENT get_person_schedule METHOD WITH THIS (V6) ---
-
-    def get_person_schedule(self, person_name: str = None, program: str = None, year_level: int = None, section: str = None) -> List[dict]:
-        """
-        Tool (Unified & DYNAMIC V6 - Ambiguity Aware): Relies on the V5
-        entity resolver and adds ambiguity detection.
         
-        If it finds schedules for multiple different people, it will
-        withhold the schedules and return a clarification signal.
-        """
-        self.debug(f"Running DYNAMIC V6 (Ambiguity Aware) schedule tool for person='{person_name}', program={program}, year={year_level}, section={section}")
+        # The search_database function will handle the aliasing (e.g. program -> course)
+        results = self.search_database(filters=filters, collection_filter=collection_filter, n_results=n_results)
+        
+        if not results:
+            self.debug("-> Search returned no documents. Returning 'empty' status.")
+            return [{"status": "empty", "summary": "I could not find any people matching those criteria."}]
+            
+        return results
 
-        # --- Case 1: Student Group Schedule Logic (No Change) ---
-        if not person_name and (program or year_level or section):
+
+
+    def get_person_schedule(self, person_name: str = None, program: str = None, year_level: int = None, section: str = None, position: str = None, department: str = None) -> List[dict]:
+        """
+        Tool (Unified & DYNAMIC V7 - Role-Aware):
+        - Finds schedule for a student group (program, year, section)
+        - Finds schedule for a specific person (person_name)
+        - Finds schedules for ALL people in a role (position, department)
+        
+        The ambiguity check is now smarter: it only triggers if
+        the search was by a *person_name* and found multiple people.
+        A search by *position* is expected to return multiple people.
+        """
+        self.debug(f"Running DYNAMIC V7 (Role-Aware) schedule tool for person='{person_name}', program={program}, year={year_level}, section={section}, position={position}")
+
+        # --- Case 1: Student Group Schedule Logic ---
+        if not person_name and (program or year_level is not None or section):
             filters = {}
             if program: filters["program"] = program
-            if year_level: filters["year_level"] = year_level
+            if year_level is not None: filters["year_level"] = year_level
             if section: filters["section"] = section
 
-            self.debug(f"-> Running group schedule search with filters={filters}")
+            self.debug(f"-> Case 1: Running group schedule search with filters={filters}")
             schedule_docs = self.search_database(filters=filters, collection_filter=self.student_schedule_collections)
             if not schedule_docs:
                 return [{"status": "empty", "summary": "No student schedules found for the specified group."}]
             return schedule_docs
-        # --- End Student Group Logic ---
-
-        # --- Case 2: Specific Person's Schedule ---
-        if person_name:
-            self.debug(f"-> Calling V5 entity resolver for: {person_name}")
+        
+        # --- THIS IS THE NEW BLOCK ---
+        # --- Case 2: Role-Based Schedule Logic (e.g., "all librarians") ---
+        if not person_name and (position or department):
+            self.debug(f"-> Case 2: Running role-based search for position={position}, dept={department}")
             
-            # 1. Call the V5 resolver
+            # 1. Find all people matching the role
+            profile_docs = self.find_people(position=position, department=department)
+
+            # --- THIS IS THE FIX ---
+            # If find_people returns no profiles or an 'empty' status,
+            # we must stop here to prevent a crash.
+            if not profile_docs or "status" in (profile_docs[0] or {}):
+                 self.debug("   -> No profiles found for this role. Searching for schedules directly by role.")
+
+                 # --- THIS IS THE FIX ---
+                 schedule_filters = {}
+                 if position: 
+                     # Use regex for partial/case-insensitive matching on position
+                     schedule_filters['position'] = {'$regex': position, '$options': 'i'}
+                 if department: 
+                     schedule_filters['department'] = {'$regex': department, '$options': 'i'}
+
+                 # Search all faculty and staff schedule collections
+                 all_staff_schedule_collections = ",".join(
+                     self.faculty_schedule_collection_list + self.staff_schedule_collection_list
+                 )
+
+                 schedule_docs = self.search_database(
+                     filters=schedule_filters,
+                     collection_filter=all_staff_schedule_collections
+                 )
+
+                 if not schedule_docs:
+                     return [{"status": "empty", "summary": f"Could not find any people or schedules for {position or ''} in {department or ''}."}]
+
+                 # If schedules are found, return them directly
+                 return schedule_docs
+                 # --- END OF FIX ---
+            
+            # 2. Collect all their aliases for a single, efficient search
+            all_aliases = set()
+            for doc in profile_docs:
+                meta = doc.get("metadata", {})
+                
+                # This 'if' check prevents the crash if a bad doc (like status:empty)
+                # somehow got through the check above.
+                if meta.get("full_name"):
+                    all_aliases.add(meta.get("full_name"))
+                
+                    # This was the line that crashed (name=None).
+                    # Now it's safely inside the 'if' block.
+                    entity = self.resolve_person_entity(name=meta.get("full_name"))
+                    if entity and entity.get("aliases"):
+                        all_aliases.update(entity["aliases"])
+
+            if not all_aliases:
+                return profile_docs + [{"status": "empty", "summary": "Found people, but could not identify their names to find schedules."}]
+
+            self.debug(f"   -> Found {len(profile_docs)} people. Searching for schedules using aliases: {all_aliases}")
+
+            # 3. Find all schedules matching any of these people
+            schedule_filters = {"$or": [
+                {"full_name": {"$in": list(all_aliases)}},
+                {"adviser_name": {"$in": list(all_aliases)}},
+                {"staff_name": {"$in": list(all_aliases)}}
+            ]}
+            all_schedule_collections = ",".join(self.student_schedule_collection_list + self.faculty_schedule_collection_list + self.staff_schedule_collection_list)
+            
+            schedule_docs = self.search_database(
+                filters=schedule_filters,
+                collection_filter=all_schedule_collections
+            )
+            
+            if not schedule_docs:
+                return profile_docs + [{"status": "empty", "summary": "Found people but could not find any matching schedules."}]
+            
+            # 4. Return all profiles + all schedules. No ambiguity check needed.
+            return profile_docs + schedule_docs
+        # --- END OF NEW BLOCK ---
+
+        # --- Case 3: Specific Person's Schedule ---
+        if person_name:
+            self.debug(f"-> Case 3: Calling V5 entity resolver for: {person_name}")
+            
             entity = self.resolve_person_entity(name=person_name)
             
             if not entity or not entity.get("primary_document"):
-                return [{"status": "error", "summary": f"Could not find anyone matching '{person_name}'."}]
+                return [{"status": "empty", "summary": f"Could not find anyone matching '{person_name}'."}]
             
             all_found_docs = entity["primary_document"]
             
-            # 2. Filter into profiles and schedules
+            # Filter into profiles and schedules
             schedule_docs = []
             profile_docs = []
             
@@ -1266,45 +1426,40 @@ class AIAnalyst:
                 else:
                     profile_docs.append(doc)
 
-            # --- 3. THIS IS THE NEW AMBIGUITY CHECK ---
-            # Count how many unique people we found profiles for
+            # --- MODIFIED AMBIGUITY CHECK ---
+            # Only trigger ambiguity if the search was BY NAME
             unique_profile_ids = set()
             for doc in profile_docs:
                 meta = doc.get("metadata", {})
-                # Use faculty_id, student_id, or full_name as a fallback unique key
                 pid = meta.get("faculty_id", meta.get("student_id", meta.get("full_name")))
                 if pid:
                     unique_profile_ids.add(pid)
             
-            # AMBIGUITY HIT: We found schedules, but they belong to more than one person.
-            if len(unique_profile_ids) > 1 and len(schedule_docs) > 0:
-                self.debug(f"-> Ambiguity detected: Found schedules for {len(unique_profile_ids)} different people. Asking for clarification.")
-                # Send ONLY the profiles and the signal. Do NOT send the schedules.
+            # THIS IS THE CHANGE: We only run this check IF person_name was provided.
+            if person_name and len(unique_profile_ids) > 1:
+                self.debug(f"-> Ambiguity detected: Search for *name* '{person_name}' found {len(unique_profile_ids)} people.")
                 return profile_docs + [{
                     "source_collection": "system_signal",
                     "content": "Ambiguity detected",
                     "metadata": {"status": "clarification_needed"}
                 }]
-            # --- END OF NEW CHECK ---
+            # --- END OF MODIFIED CHECK ---
 
-            # 4. Check if we found any schedules (Original logic)
             if not schedule_docs:
                 return profile_docs + [{"source_collection": "system_note", "content": f"Found person '{person_name}' but could not find a matching schedule.", "metadata": {"status": "empty"}}]
             
-            # 5. Success: We found one person (or 0 profiles) and their schedule(s)
             return profile_docs + schedule_docs
 
-        return [{"status": "error", "summary": "Please provide a person's name or a student group filter (program, year, section)."}]
-
-# --- END OF REPLACEMENT ---
-
-
+        return [{"status": "error", "summary": "Please provide a person's name, a student group (program, year), or a role (position)."}]
 
 
     def get_adviser_info(self, person_name: str = None, program: str = None, year_level: int = None, section: str = None) -> List[dict]:
         """
         Tool (UPGRADED): Finds the adviser for a specific student (by name) or a
         student group (by filters), and retrieves the adviser's faculty profile.
+        
+        [FIX]: Now injects the found 'adviser' name into a 'full_name' key
+        to ensure placeholder resolution in multi-step plans.
         """
         self.debug(f"Running UPGRADED adviser tool for person='{person_name}', program={program}, year={year_level}, section={section}")
 
@@ -1340,7 +1495,7 @@ class AIAnalyst:
                 return all_found_docs + [{"status": "error", "summary": f"The person '{person_name}' was found, but they are not a student and do not have an adviser."}]
         
         # --- Case 2: Search by group filters (or filters from Case 1) ---
-        elif program and year_level:
+        elif program and (year_level is not None): # <-- Added 'is not None' for robustness
             self.debug(f"-> Searching for group: program={program}, year_level={year_level}, section={section}")
             schedule_filters["program"] = program
             schedule_filters["year_level"] = year_level
@@ -1369,17 +1524,26 @@ class AIAnalyst:
         if not adviser_name:
             return all_found_docs + schedule_docs + [{"status": "empty", "summary": f"Found a schedule but it is missing an adviser's name."}]
         
+        # --- THIS IS THE FIX ---
+        # Inject the 'adviser' name as 'full_name' into the schedule doc's
+        # metadata. This guarantees the placeholder $full_name_from_step_1
+        # will resolve successfully in the next step.
+        first_schedule_doc.setdefault("metadata", {})["full_name"] = adviser_name
+        self.debug(f"   -> Injected 'full_name: {adviser_name}' into schedule doc for placeholder.")
+        # --- END OF FIX ---
+        
         self.debug(f"-> Found adviser '{adviser_name}'. Resolving their profile.")
         adviser_entity = self.resolve_person_entity(name=adviser_name)
         faculty_docs = adviser_entity.get("primary_document", [])
         
         if not faculty_docs:
+             # This is now safe, because schedule_docs[0] has the 'full_name' key
              return all_found_docs + schedule_docs + [{"status": "empty", "summary": f"Found adviser '{adviser_name}' on the schedule but could not find their faculty profile."}]
 
         # Return all collected documents
         return all_found_docs + schedule_docs + faculty_docs
 
-# --- END OF REPLACEMENT ---
+
 
     def find_faculty_by_class_count(self, find_most: bool = True) -> List[dict]:
         """
@@ -1539,6 +1703,177 @@ class AIAnalyst:
 
             # --- REPLACE THE ENTIRE resolve_person_entity METHOD WITH THIS (V5.2 - Corrected) ---
 
+            # In backend/utils/ai_core/analyst.py
+    
+    # --- REPLACE THE ENTIRE resolve_person_entity METHOD WITH THIS (V5.4) ---
+
+    # --- REPLACE THE ENTIRE resolve_person_entity METHOD WITH THIS (V5.4 - Strict) ---
+
+    def resolve_person_entity(self, name: str, **kwargs) -> dict:
+        """
+        Tool (UPGRADED V5.4 - Strict):
+        Finds all documents and name variations for a person.
+        
+        This version is much stricter. It performs a high-confidence,
+        full-name regex search first. It will only fall back to a
+        partial-word search if the strict search yields no results.
+        This fixes ambiguity when a student and faculty share a similar name.
+        """
+        self.debug(f"Resolving entity (V5.4 - Strict) for: '{name}' with filters: {kwargs}")
+        
+        # 1. Clean the main 'name' parameter
+        aggressive_clean_pattern = r'\b(PROF|PROFESSOR|DR|DOCTOR|MR|MS|MRS)\b\.?|[^\w\s]'
+        cleaned_name = re.sub(aggressive_clean_pattern, '', name, flags=re.IGNORECASE).strip()
+        
+        # Create a regex pattern that matches the *full name* as a whole string.
+        # This is much stricter than searching for individual words.
+        # It handles names like "Reyes, Miguel S." or "Miguel S. Reyes".
+        # We escape the name and require all parts to be present.
+        name_parts_for_regex = [re.escape(part) for part in re.split(r'[\s,]+', cleaned_name) if part]
+        full_name_regex_pattern = r'.*'.join(name_parts_for_regex)
+        search_query_regex = re.compile(full_name_regex_pattern, re.IGNORECASE)
+
+        # 2. Get other filters (e.g., department, program) from kwargs
+        active_filters = {}
+        for key, value in kwargs.items():
+            if key not in ["name", "person_name", "student_name"] and value:
+                active_filters[key] = value
+        
+        self.debug(f"   -> Pass 1: Searching with STRICT full-name regex: '{search_query_regex.pattern}' and filters: {active_filters}")
+
+        # --- Pass 1: High-Confidence Profile Search ---
+        # Search for the *full name regex* in the 'full_name' field.
+        profile_collections = self.all_people_collections
+        profile_filters = dict(active_filters)
+        profile_filters['full_name'] = {"$regex": search_query_regex}
+        
+        profile_docs = self.search_database(
+            filters=profile_filters,
+            collection_filter=profile_collections
+        )
+        
+        # --- Fallback: If full name search fails, try partial words (V5.3 logic) ---
+        if not profile_docs:
+            self.debug("   -> No exact profile match. Falling back to V5.3 partial word search.")
+            
+            all_name_parts = set(part for part in cleaned_name.lower().split() if len(part) > 2)
+            if not all_name_parts:
+                return {} # No valid name parts to search for
+            
+            search_regex_list = [re.compile(re.escape(word), re.IGNORECASE) for word in all_name_parts]
+            
+            profile_filters = dict(active_filters)
+            name_and_conditions = []
+            for regex in search_regex_list:
+                name_and_conditions.append({
+                    "$or": [
+                        {"full_name": {"$regex": regex}},
+                        {"position": {"$regex": regex}},
+                        {"department": {"$regex": regex}}
+                    ]
+                })
+            
+            if name_and_conditions:
+                profile_filters["$and"] = name_and_conditions
+            else:
+                # No valid partial words, so we can't search
+                return {}
+            
+            profile_docs = self.search_database(
+                filters=profile_filters,
+                collection_filter=profile_collections
+            )
+        # --- END OF FALLBACK ---
+
+        # De-duplicate profiles
+        unique_profiles = list({doc.get("metadata", {}).get("student_id", doc.get("metadata", {}).get("faculty_id", doc.get("content"))): doc for doc in profile_docs}.values())
+        self.debug(f"   -> Found {len(unique_profiles)} unique profile(s).")
+        
+        if not unique_profiles:
+            self.debug(f"   -> No profiles found. Aborting.")
+            return {}
+
+        # --- Pass 2: Find all related SCHEDULES for each profile ---
+        all_related_schedules = []
+        all_aliases = set()
+        
+        all_aliases.add(name)
+        all_aliases.add(cleaned_name)
+        
+        student_schedule_collections = ",".join(self.student_schedule_collection_list)
+        staff_schedule_collections = ",".join(self.faculty_schedule_collection_list + self.staff_schedule_collection_list)
+
+        for profile in unique_profiles:
+            meta = profile.get("metadata", {})
+            source_coll = profile.get("source_collection", "")
+            
+            profile_full_name = meta.get("full_name")
+            if profile_full_name:
+                all_aliases.add(profile_full_name)
+
+            if any(s == source_coll for s in self.student_collection_list):
+                student_filters = {
+                    "program": meta.get("program") or meta.get("course"),
+                    "year_level": meta.get("year_level") or meta.get("year"),
+                    "section": meta.get("section")
+                }
+                # Only search for schedules if we have all the keys
+                if all(student_filters.values()):
+                    all_related_schedules.extend(self.search_database(
+                        filters=student_filters,
+                        collection_filter=student_schedule_collections
+                    ))
+            
+            elif any(s == source_coll for s in self.staff_collection_list):
+                # We have a faculty/staff profile. Search for their schedule
+                # using their *full name*. This is the key.
+                if not profile_full_name:
+                    continue
+                    
+                # Create a strict regex for the *exact* full name
+                name_parts = [re.escape(part) for part in re.split(r'[\s,]+', profile_full_name) if part]
+                strict_regex = re.compile(r'.*'.join(name_parts), re.IGNORECASE)
+                
+                schedule_filters = {"$or": [
+                    {"full_name": {"$regex": strict_regex}},
+                    {"adviser_name": {"$regex": strict_regex}},
+                    {"staff_name": {"$regex": strict_regex}}
+                ]}
+                all_related_schedules.extend(self.search_database(
+                    filters=schedule_filters,
+                    collection_filter=staff_schedule_collections
+                ))
+
+        # Add aliases from any schedules we found
+        for sched in all_related_schedules:
+            meta = sched.get("metadata", {})
+            for key in ["full_name", "adviser_name", "staff_name"]:
+                if meta.get(key):
+                    all_aliases.add(meta.get(key))
+
+        all_docs = unique_profiles + all_related_schedules
+        
+        # De-duplicate all found documents
+        final_unique_docs = list({
+            doc.get("metadata", {}).get("schedule_id", 
+            doc.get("metadata", {}).get("student_id", 
+            doc.get("metadata", {}).get("faculty_id", doc.get("metadata", {}).get("full_name"))))
+            : doc for doc in all_docs
+        }.values())
+
+        primary_name = name
+        if unique_profiles:
+            primary_name = unique_profiles[0].get("metadata", {}).get("full_name", name)
+
+        self.debug(f"   -> Entity resolved: Primary='{primary_name}', Aliases={all_aliases}, Found {len(final_unique_docs)} total docs.")
+        
+        return {
+            "primary_name": primary_name,
+            "aliases": list(all_aliases),
+            "primary_document": final_unique_docs
+        }
+
+
     def resolve_person_entity(self, name: str, **kwargs) -> dict:
         """
         Tool (UPGRADED V5.3 - Filter-Aware):
@@ -1642,7 +1977,6 @@ class AIAnalyst:
             
             unique_schedules = list({doc.get("metadata", {}).get("schedule_id"): doc for doc in schedule_docs}.values())
             primary_name = unique_schedules[0].get("metadata", {}).get("full_name", name)
-            self.current_query_entities.append(primary_name)
             
             return {
                 "primary_name": primary_name,
@@ -1707,7 +2041,6 @@ class AIAnalyst:
         primary_name = name
         if unique_profiles:
             primary_name = unique_profiles[0].get("metadata", {}).get("full_name", name)
-            self.current_query_entities.append(primary_name)
 
         self.debug(f"   -> Entity resolved: Primary='{primary_name}', Aliases={all_aliases}, Found {len(final_unique_docs)} total docs.")
         
@@ -2004,45 +2337,71 @@ class AIAnalyst:
     # In backend/utils/ai_core/analyst.py
 
 
-    
+# In backend/utils/ai_core/analyst.py
 
-    def _save_dynamic_example(self, query: str, plan: dict, session: dict, outcome: str):
+    # --- REPLACE THIS ENTIRE METHOD ---
+
+    def _save_dynamic_example(self, query: str, plan: dict, session: dict, outcome: str) -> Optional[str]:
         """
-        [UPGRADED w/ HASHING] De-lexicalizes successful plans and saves them,
-        using a unique hash of the plan_template for robust de-duplication.
+        [UPGRADED w/ HASHING V2] De-lexicalizes successful MULTI-STEP plans and saves them,
+        using a unique hash of the *entire plan_template* for robust de-duplication.
+        
+        Returns the plan_hash if successful, otherwise None.
         """
         if not outcome.startswith("SUCCESS"):
             self.debug(f"Skipping memory save. Reason: Outcome was '{outcome}'.")
-            return
+            return None
         
         try:
-            simplified_plan = plan.get("plan", [{}])[0].get("tool_call", {})
-            if not simplified_plan or not simplified_plan.get("tool_name"):
+            plan_steps = plan.get("plan", [])
+            if not plan_steps:
                 self.debug("Could not extract a valid plan to save.")
-                return
+                return None
 
-            templates = self.policy_engine.delexicalize(query, simplified_plan)
+            # --- THIS IS THE NEW LOGIC ---
+            # 1. Gather ALL parameters from ALL steps (except finish_plan)
+            # This creates a complete picture of all "entities" in the query.
+            all_params = {}
+            for step in plan_steps:
+                tool_call = step.get("tool_call", {})
+                if tool_call.get("tool_name") != "finish_plan":
+                    all_params.update(tool_call.get("parameters", {}))
+            
+            # 2. Delexicalize the user query based on ALL found parameters
+            # We create a "dummy" tool_call with all params to use the existing delexicalizer
+            master_tool_call = {"tool_name": "multi_step_plan", "parameters": all_params}
+            templates = self.policy_engine.delexicalize(query, master_tool_call)
             user_pattern = templates["user_pattern"]
-            plan_template = templates["plan_template"]
 
-            # --- THIS IS THE FIX ---
-            # 1. Create a consistent, sorted JSON string of the plan. This is the "canonical form".
-            canonical_plan_str = json.dumps(plan_template, sort_keys=True)
+            # 3. Delexicalize EACH STEP in the plan to create the full template
+            full_plan_template = []
+            intent = "unknown"
+            for step in plan_steps:
+                step_tool_call = step.get("tool_call", {})
+                
+                # Get the delexicalized *plan* (not the user_pattern)
+                step_template = self.policy_engine.delexicalize(query, step_tool_call)["plan_template"]
+                full_plan_template.append({"tool_call": step_template})
+                
+                # Set the intent to the first non-conversational tool
+                if intent == "unknown" and step_tool_call.get("tool_name") not in ["finish_plan", "answer_conversational_query"]:
+                    intent = step_tool_call.get("tool_name")
             
-            # 2. Create a unique SHA256 hash (the "fingerprint") of the canonical string.
+            # 4. Create a unique hash of the ENTIRE delexicalized plan
+            canonical_plan_str = json.dumps(full_plan_template, sort_keys=True)
             plan_hash = hashlib.sha256(canonical_plan_str.encode('utf-8')).hexdigest()
-            
-            # 3. Check for duplicates using this reliable, unique hash.
+            # --- END OF NEW LOGIC ---
+
+            # 5. Check for duplicates using this new, reliable hash
             if self.dynamic_examples_collection.find_one({"plan_hash": plan_hash}):
-                self.debug("Duplicate example plan hash found. Not saving to memory.")
-                return
-            # --- END OF FIX ---
+                self.debug(f"Duplicate multi-step example plan hash found. Not saving to memory, but returning hash.")
+                return plan_hash
                 
             example_doc = {
                 "user_pattern": user_pattern,
-                "plan_template": plan_template,
-                "plan_hash": plan_hash,  # <-- Store the hash with the document
-                "intent": simplified_plan.get("tool_name"),
+                "plan_template": full_plan_template, # <-- Save the full list
+                "plan_hash": plan_hash,
+                "intent": intent, # <-- Use the new intent
                 "topic": session.get("conversation_summary", "general"),
                 "quality_label": outcome,
                 "created_at": datetime.now(timezone.utc),
@@ -2052,15 +2411,11 @@ class AIAnalyst:
             self.dynamic_examples_collection.insert_one(example_doc)
             self.debug(f"✅ New abstract template saved to AI memory for pattern: '{user_pattern}'")
             
+            return plan_hash
+            
         except Exception as e:
             self.debug(f"⚠️ Error saving dynamic example: {e}")
-
-
-
-
-
-
-
+            return None
     
 
 
@@ -2075,7 +2430,7 @@ class AIAnalyst:
             return json.loads(m.group(0))
         except json.JSONDecodeError:
             return None
-
+        
     def _create_reverse_schema_map(self) -> dict:
         """
         Creates a mapping from common alternative field names (e.g., 'course', 'yr')
@@ -2087,13 +2442,15 @@ class AIAnalyst:
             'full_name': ('name', 'student_name'),
             'section': ('sec',),
             'adviser': ('advisor', 'faculty'),
-            'student_id': ('stud_id', 'id', 'student_number')
+            'student_id': ('stud_id', 'id', 'student_number'),
+            'pdm_id': ('student_id', 'id', 'student_number')
         }
         reverse_map = {}
         for standard_name, original_names in mappings.items():
             for original_name in original_names:
                 reverse_map[original_name] = standard_name
         return reverse_map
+
 
     def _normalize_schema(self, schema_dict: dict) -> dict:
         """
@@ -2151,31 +2508,71 @@ class AIAnalyst:
 
         # (Add this new method anywhere in the AIAnalyst class)
 
+
+# In backend/utils/ai_core/analyst.py
+
+    # --- REPLACE THIS ENTIRE METHOD ---
+
     def _clean_documents_for_synthesizer(self, docs: List[dict]) -> List[dict]:
         """
-        Applies the METADATA_FIELD_BLACKLIST to a list of documents
-        to create a clean, simple context for the Synthesizer AI.
+        [CORRECTED V3] Prepares documents for the Synthesizer.
+        This version fixes the 'grouped_students' hallucination by
+        pre-parsing the student list into a lightweight, name-only list.
         """
         cleaned_docs = []
-        if not hasattr(self, 'METADATA_FIELD_BLACKLIST'):
-             return docs # Safety check
+        blacklist = getattr(self, 'METADATA_FIELD_BLACKLIST', set())
              
         for doc in docs:
-            # We only care about 3 top-level keys.
-            # 1. source_collection is always useful.
-            # 2. content is the most important data (the text, or the JSON object).
+            source_coll = doc.get("source_collection")
+
+            # --- THIS IS THE FIX ---
+            if source_coll == "grouped_students":
+                
+                # We will NOT recursively clean. We will extract ONLY the names.
+                # This makes the context for the Synthesizer extremely clean and small.
+                original_student_list = doc.get("students", [])
+                
+                # Create a new, clean list of student objects
+                # containing ONLY the metadata the Synthesizer needs.
+                cleaned_student_list = []
+                for student_doc in original_student_list:
+                    student_meta = student_doc.get("metadata", {})
+                    # Add only students that actually have a name
+                    if student_meta.get("full_name"):
+                        cleaned_student_list.append({
+                            "metadata": {
+                                "full_name": student_meta.get("full_name")
+                            }
+                        })
+
+                cleaned_docs.append({
+                    "source_collection": "grouped_students",
+                    "group_name": doc.get("group_name"),
+                    # NEW: Pass the pre-calculated count directly
+                    "student_count": len(cleaned_student_list), 
+                    # NEW: Pass the lightweight name-only list
+                    "students": cleaned_student_list 
+                })
+                continue # Skip the rest of the loop for this special doc
+            # --- END OF FIX ---
+
+            # --- This is the original logic (which is correct for normal docs) ---
+            rich_content = doc.get("formatted_text")
+            if not rich_content:
+                rich_content = doc.get("metadata", {}).get("formatted_text")
+            final_content = rich_content if rich_content else doc.get("content")
+            # --- END OF FIX ---
+
             new_doc = {
                 "source_collection": doc.get("source_collection"),
-                "content": doc.get("content") 
+                "content": final_content 
             }
             
-            # 3. Now, we filter the metadata
             original_metadata = doc.get("metadata", {})
             cleaned_metadata = {}
             if original_metadata:
                 for key, value in original_metadata.items():
-                    # Only add fields that are NOT in the blacklist
-                    if key not in self.METADATA_FIELD_BLACKLIST:
+                    if key not in blacklist:
                         cleaned_metadata[key] = value
             
             new_doc["metadata"] = cleaned_metadata
@@ -2184,15 +2581,16 @@ class AIAnalyst:
         return cleaned_docs
 
 
-
-
-        
-        
+    
     def _resolve_placeholders(self, params: dict, step_results: dict) -> dict:
         """
-        Recursively searches for and replaces placeholders (e.g., '$program_from_step_1')
-        in a step's parameters with actual values from the results of previous steps.
+        [CORRECTED V2] Recursively searches for and replaces placeholders
+        (e.g., '$program_from_step_1') in a step's parameters with actual
+        values from the results of previous steps.
+        
+        This version returns the RAW value, not a normalized filter.
         """
+        # Deep copy to avoid modifying the original plan structure
         resolved_params = json.loads(json.dumps(params))
 
         # Map standard field names to their original variants
@@ -2200,58 +2598,8 @@ class AIAnalyst:
         for original, standard in self.REVERSE_SCHEMA_MAP.items():
             forward_map.setdefault(standard, []).append(original)
 
-        def normalize_for_search(key: str, value: Any):
-            """
-            Turns a scalar value into a forgiving filter dictionary for the database,
-            expanding it to include common aliases (e.g., 'BSCS' -> 'BS COMPUTER SCIENCE').
-            """
-            COURSE_ALIASES = {
-                "BSCS": ["BSCS", "BS COMPUTER SCIENCE", "BS Computer Science"],
-                "BSTM": ["BSTM", "BS TOURISM MANAGEMENT", "BS Tourism Management"],
-                "BSOA": ["BSOA", "BS OFFICE ADMINISTRATION", "BS Office Administration"],
-                "BECED": ["BECED", "BACHELOR OF EARLY CHILDHOOD EDUCATION", "Bachelor of Early Childhood Education"],
-                "BSIT": ["BSIT", "BS INFORMATION TECHNOLOGY", "BS Information Technology", "BSINFORMATION"],
-                "BSHM": ["BSHM", "BS HOSPITALITY MANAGEMENT", "BS Hospitality Management"],
-                "BTLE": ["BTLE", "BACHELOR OF TECHNOLOGY AND LIVELIHOOD EDUCATION", "Bachelor of Technology and Livelihood Education"]
-            }
-            
-            if isinstance(value, dict) and any(op in value for op in ("$in", "$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$nin")):
-                return value
-
-            scalars: List[Any] = [value] if value is not None else []
-            out: List[Any] = []
-
-            if key == "program":
-                for v in scalars:
-                    v_str_u = str(v).upper()
-                    matched = False
-                    for prog_key, alias_list in COURSE_ALIASES.items():
-                        alias_upper = [a.upper() for a in alias_list]
-                        if v_str_u == prog_key or v_str_u in alias_upper:
-                            out.extend(alias_list)
-                            matched = True
-                            break
-                    if not matched:
-                        out.append(v)
-                return {"$in": [str(x) for x in list(dict.fromkeys(out))]}
-
-            if key == "year_level":
-                for v in scalars:
-                    vs = str(v).strip()
-                    out.extend([vs, f"Year {vs}", f"{vs}st Year", f"{vs}nd Year", f"{vs}rd Year", f"{vs}th Year"])
-                    if vs == "1": out.extend(["1st Year", "First Year", "Year I"])
-                    if vs == "2": out.extend(["2nd Year", "Second Year", "Year II"])
-                    if vs == "3": out.extend(["3rd Year", "Third Year", "Year III"])
-                    if vs == "4": out.extend(["4th Year", "Fourth Year", "Year IV"])
-                return {"$in": list(dict.fromkeys(out))}
-            
-            if key == "section":
-                for v in scalars:
-                    vs = str(v).upper().strip()
-                    out.extend([vs, f"SEC {vs}", f"Section {vs}"])
-                return {"$in": [str(x) for x in list(dict.fromkeys(out))]}
-
-            return {"$eq": str(value)}
+        # This helper function is no longer needed here, as we return raw values.
+        # def normalize_for_search(key: str, value: Any): ...
 
         def resolve(obj):
             if isinstance(obj, dict):
@@ -2264,27 +2612,48 @@ class AIAnalyst:
                 parts = obj.strip('$').split('_from_step_')
                 if len(parts) == 2:
                     key_to_find, step_num_str = parts
-                    step_num = int(step_num_str)
+                    try:
+                        step_num = int(step_num_str)
+                    except ValueError:
+                        self.debug(f"   -> Invalid placeholder format: {obj}")
+                        return obj # Not a valid placeholder
+
                     self.debug(f"   -> Resolving placeholder: looking for '{key_to_find}' in results of step {step_num}")
                     if step_num in step_results and step_results[step_num]:
                         step_result = step_results[step_num]
+                        
                         if isinstance(step_result, dict):
+                            # This handles simple dict returns
                             if key_to_find in step_result:
                                 return step_result[key_to_find]
+                        
                         elif isinstance(step_result, list) and len(step_result) > 0:
-                            metadata = step_result[0].get("metadata", {})
-                            if key_to_find in metadata:
-                                return metadata[key_to_find]
-                            if key_to_find in metadata:
-                                return normalize_for_search(key_to_find, metadata[key_to_find])
-                            for original_key in forward_map.get(key_to_find, []):
-                                if original_key in metadata:
-                                    self.debug(f"   -> Found value using original key '{original_key}' for standard key '{key_to_find}'")
-                                    return normalize_for_search(key_to_find, metadata[original_key])
-            return obj
+                            # --- START OF FIX ---
+                            # Iterate through ALL documents in the step result to find the key
+                            for doc in step_result:
+                                metadata = doc.get("metadata", {})
+                                if not metadata:
+                                    continue
+
+                                # 1. Check for the exact key
+                                if key_to_find in metadata:
+                                    self.debug(f"   -> Found value '{metadata[key_to_find]}' for '{key_to_find}' in metadata.")
+                                    return metadata[key_to_find] # <-- FIX: Return raw value
+
+                                # 2. Check for aliased keys
+                                for original_key in forward_map.get(key_to_find, []):
+                                    if original_key in metadata:
+                                        self.debug(f"   -> Found value '{metadata[original_key]}' for '{key_to_find}' (as alias '{original_key}') in metadata.")
+                                        return metadata[original_key] # <-- FIX: Return raw value
+                            
+                            # If we looped through all docs and found nothing:
+                            self.debug(f"   -> FAILED to find '{key_to_find}' in any of the {len(step_result)} documents from step {step_num}.")
+                            # --- END OF FIX ---
+
+            return obj # Return the original placeholder if not found
+        
         return resolve(resolved_params)
     
-
     def analyze_query_intent(self, query):
         """Enhanced query analysis with better person name extraction"""
         query_upper = query.upper()
@@ -2683,12 +3052,16 @@ class AIAnalyst:
         
         return " | ".join(reasons) if reasons else "General relevance match"
     
+# In backend/utils/ai_core/analyst.py
+    # --- REPLACE THE ENTIRE 'search_database' METHOD WITH THIS ---
+
     def search_database(self, query_text: Optional[str] = None, query: Optional[str] = None,
                     filters: Optional[dict] = None, document_filter: Optional[dict] = None,
-                    collection_filter: Optional[str] = None, n_results: int = 200) -> List[dict]: # Add n_results=50 here
+                    collection_filter: Optional[str] = None, n_results: int = 200) -> List[dict]:
         """
         The core database search function. It can handle semantic queries, metadata filters,
         and document content filters, with robust normalization for filter values.
+        [CORRECTED to handle string-based year levels like '2nd year']
         """
         qt = query or query_text
         final_query_texts: Optional[List[str]] = None
@@ -2734,23 +3107,40 @@ class AIAnalyst:
                         or_list = [{key: {"$in": list(all_aliases)}} for key in possible_keys]
                         filter_for_this_key = {"$or": or_list} if len(or_list) > 1 else or_list[0]
 
+                    # --- START OF YEAR_LEVEL FIX ---
                     elif standard_key == "year_level":
                         or_conditions_for_year = []
-                        year_str = str(v)
-                        year_variations_str = {year_str, f"Year {year_str}"}
-                        for key in possible_keys:
-                            or_conditions_for_year.append({key: {"$in": list(year_variations_str)}})
+                        
+                        # Extract the first digit from the value (e.g., "2nd year" -> "2")
+                        year_num_str = None
+                        match = re.search(r'\d+', str(v))
+                        if match:
+                            year_num_str = match.group(0)
+                        
+                        if year_num_str:
+                            # Search for the string number (e.g., "2")
+                            year_variations_str = {year_num_str, f"Year {year_num_str}"}
+                            for key in possible_keys:
+                                or_conditions_for_year.append({key: {"$in": list(year_variations_str)}})
+                            
+                            # Also search for the integer number (e.g., 2)
                             try:
-                                year_int = int(v)
-                                or_conditions_for_year.append({key: {"$eq": year_int}})
+                                year_int = int(year_num_str)
+                                for key in possible_keys:
+                                    or_conditions_for_year.append({key: {"$eq": year_int}})
                             except (ValueError, TypeError):
-                                pass
-                        filter_for_this_key = {"$or": or_conditions_for_year} if len(or_conditions_for_year) > 1 else or_conditions_for_year[0]
+                                pass # This is fine, we'll just search by string
+                        else:
+                            # Fallback if no digit is found (e.g., "First Year")
+                            year_variations_str = {str(v), f"Year {v}"}
+                            for key in possible_keys:
+                                or_conditions_for_year.append({key: {"$in": list(year_variations_str)}})
+                        
+                        filter_for_this_key = {"$or": or_conditions_for_year}
+                    # --- END OF YEAR_LEVEL FIX ---
 
                     elif standard_key == "section":
                         section_value = str(v)
-                        # Use a regular expression to find the last letter/number combo
-                        # This will extract 'A' from 'Section A' or 'SEC-A'
                         match = re.search(r'\b([A-Z0-9]+)\b$', section_value, re.IGNORECASE)
                         
                         if match:
@@ -2759,17 +3149,13 @@ class AIAnalyst:
                             or_list = [{key: {"$in": list(section_variations)}} for key in possible_keys]
                             filter_for_this_key = {"$or": or_list}
                         else:
-                            # Fallback to generic logic if no letter is found
                             or_list = [{key: section_value} for key in possible_keys]
                             filter_for_this_key = {"$or": or_list}
 
                     else: # Generic logic for all other filters
                         query_value = v
                         if isinstance(v, str):
-                            # --- THIS IS THE FIX ---
-                            # Use a case-insensitive regex instead of a fragile $in list
                             query_value = {"$regex": f"^{re.escape(v)}$", "$options": "i"}
-                            # --- END OF FIX ---
 
                         if len(possible_keys) > 1:
                             or_list = [{key: query_value} for key in possible_keys]
@@ -2831,8 +3217,8 @@ class AIAnalyst:
                 if standard_key == 'year_level': db_key = 'year'
                 mongo_or_list.append({db_key: v})
         return {"$or": mongo_or_list} if mongo_or_list else {}
+    
 
-        
     def _validate_plan(self, plan_json: Optional[dict]) -> tuple[bool, Optional[str]]:
         """
         Validates the structure and content of the planner's JSON output before execution.
@@ -2904,10 +3290,6 @@ class AIAnalyst:
 
         return True, None
 
-
-
-    # Add this new function anywhere inside your AIAnalyst class
-
     def _execute_smart_fallback_search(self, query: str) -> List[dict]:
         """
         A dedicated, AI-powered fallback search that uses intent analysis and relevance
@@ -2964,317 +3346,299 @@ class AIAnalyst:
     # backend/utils/ai_core/analyst.py
 # Find the existing 'execute_reasoning_plan' method and replace it with this entire block:
 
+
+
+# --- REPLACE THIS ENTIRE METHOD ---
     def execute_reasoning_plan(self, query: str, session: dict) -> tuple[str, Optional[dict], List[dict]]:
         """
-        [MODIFIED FOR SESSIONS & SUMMARY] The main orchestration method.
+        [UPGRADED WITH OFFLINE MODE] The main orchestration method.
+        - If 'offline', it runs a simple Planner -> Synth loop.
+        - If 'online', it first runs a "mini-LLM" triage to classify
+          the query, handles ambiguity, and uses chat history.
         """
-        self.debug("Starting reasoning plan execution...")
         start_time = time.time()
-        start_datetime = datetime.now(timezone.utc) # <-- 1. ADD THIS TIMESTAMP
-
-        # --- 2. ADD THESE VARIABLE INITIALIZERS ---
+        start_datetime = datetime.now(timezone.utc)
+        
         planner_duration = 0.0
         retrieval_duration = 0.0
         synth_duration = 0.0
         plan_hash = None
-        # --- END OF ADDITION ---
-
-        self.current_query_entities = []
+        
         context = session.get("structured_context", {})
-        
-        # --- NEW CLARIFICATION LOGIC V3 ---
-        # --- [NEW "MINI-PLANNER" CLARIFICATION LOGIC] ---
+
+        # --- NEW OFFLINE/ONLINE LOGIC ---
+        if self.execution_mode == 'offline':
+            # --- START OFFLINE EXECUTION PATH ---
+            # This path skips Triage, History, and Coreference AI steps.
+            self.debug("Offline mode: Skipping Triage, History, and Coreference AI steps.")
+            chat_history = [] # No history for offline mode
             
-        if context.get("clarification_pending"):
-            self.debug("Clarification is pending. Processing user's answer...")
+            plan_json = None
+            final_context = {}
+            error_msg = None
+            results_count = 0
             
-            # Check if the user is starting a totally new topic
-            new_topic_keywords = ["who is", "what is", "what are", "show me", "list", "find", "get", "compare", "how many", "verify"]
-            is_new_topic = any(query.lower().startswith(keyword) for keyword in new_topic_keywords)
+            outcome = "FAIL_UNKNOWN"
+            execution_mode = "primary"
+            collected_docs = []
 
-            if not is_new_topic:
-                self.debug("This is an answer to our question. Using 'mini-planner' to combine context.")
+            try:
+                max_retries = 5
+                planner_start_time = time.time()
                 
-                # 1. Get the original ambiguous query from session
-                original_query = context.get("original_ambiguous_query", "The user's previous query.")
+                # No Coreference-to-Parameter Injection
                 
-                # 2. Get the active filters from the session
-                active_filters = context.get("active_filters", {})
-                
-                # 3. Combine the query, the answer, AND the active filters
-                combined_query = (
-                    f"The user's previous query was: '{original_query}'. "
-                    f"That query was ambiguous, so I asked for more detail. "
-                    f"The user has now provided the clarifying detail, which is: '{query}'. "
-                    f"CRITICAL: You MUST apply these existing filters to this new detail: {json.dumps(active_filters)}"
-                )
-                
-                self.debug(f"Combined query for planner: {combined_query}")
-                
-                # 4. Overwrite the 'query' variable with this new combined prompt
-                query = combined_query
-                
-                # 5. Reset the clarification state
-                context["clarification_pending"] = False
-                context["original_ambiguous_query"] = ""
-                
-            else:
-                # --- THIS IS THE NEW FIX ---
-                self.debug("User changed the topic. Resetting state and handling new query.")
-                context["clarification_pending"] = False
-                context["original_ambiguous_query"] = ""
-                # We simply let the 'query' variable (e.g., "nevermind who is erin ruiz")
-                # pass through to the planner *without* any old context.
-                # --- END OF FIX ---
-        
-            # --- END OF NEW LOGIC ---
-        
-        # --- THIS IS THE PROMPT GENERATION LOGIC FROM THE `else` BLOCK ---
-        # --- IT MUST BE MOVED *OUTSIDE* THE ELSE BLOCK ---
-        
-        coref_params = self._coref_to_params(query, session)
-        if coref_params:
-            self.debug(f"Injecting coreference params into query: {coref_params}")
-            query = f"{query}\n\n[System Hint: The pronoun in the query (he/she/his/her) refers to: {coref_params.get('person_name')}]"
+                filters_cleared_on_retry = False # Not really used, but kept for consistency
 
-        filters_cleared_on_retry = False
-        
-        # --- THIS BLOCK IS NOW THE *FIRST* CHECK ---
-        # --- Check for AMBIGUITY on the *first* pass ---
-        # --- Check for AMBIGUITY on the *first* pass (Context-Aware) ---
-        # --- [NEW "SpaCy-Aware" Ambiguity Check (v6 - FINAL)] ---
-        is_ambiguous = False
-        if not context.get("clarification_pending"): # Only run if we aren't already handling a clarification
-            stripped_query = query.strip().lower()
-            
-            # 1. Is the query grammatically vague? (Light check)
-            is_grammatically_vague = False
-            query_words = stripped_query.split()
-            conversational_starters = {'hello', 'hi', 'hey', 'thanks', 'thank you', 'ok', 'okay', 'bye', 'goodbye'}
-            
-            if len(query_words) <= 3 and stripped_query not in conversational_starters:
-                 if stripped_query and query_words[-1] in ['of', 'for', 'in', 'at', 'from', 'with', 'about', 'to']:
-                    self.debug(f"Query flagged as incomplete. Reason: Ends with a preposition '{query_words[-1]}'.")
-                    is_grammatically_vague = True
-                 elif len(query_words) <= 2:
-                     self.debug(f"Query flagged as incomplete. Reason: Short, non-command query.")
-                     is_grammatically_vague = True
-
-            # 2. If not vague by length, check with heavy NLP
-            if not is_grammatically_vague and self.policy_engine.is_query_vague_nlp(stripped_query):
-                is_grammatically_vague = True
-
-            # 3. If it IS vague, decide if it's an answer or a new question using SpaCy
-            if is_grammatically_vague:
-                self.debug(f"Query '{stripped_query}' is grammatically vague. Analyzing with SpaCy...")
-                
-                # Check 1: Is it a new question? (e.g., "what is the schedule?")
-                if self.policy_engine.is_interrogative(stripped_query):
-                    self.debug("-> NLP: Query is a vague question. Flagging as AMBIGUOUS.")
-                    is_ambiguous = True
-                
-                # Check 2: Is it "data-like"? (e.g., "bscs 2nd year", "4th year")
-                elif self.policy_engine.is_data_like(stripped_query):
-                    self.debug("-> NLP: Query is vague, but contains data-like tokens. Assuming it's an ANSWER. Bypassing ambiguity check.")
-                    is_ambiguous = False # Treat it as a follow-up
-                
-                else:
-                    # It's vague, not a question, and not data-like (e.g., "asdf lkjh").
-                    self.debug("-> NLP: Query is vague, not a question, and not data-like. Flagging as AMBIGUOUS.")
-                    is_ambiguous = True
-        # --- [END OF NEW "SpaCy-Aware" BLOCK] ---
-            
-            # --- END OF NEW LOGIC ---
-
-
-
-       
-        # --- END NEW BLOCK 1 ---
-        # --- NEW: Extract context from the full session object ---
-        # --- NEW: Extract context with TOPIC-SCOPED history ---
-        # Only pass recent turns from the SAME topic to avoid contextual bleed
-        chat_history = self._get_topic_scoped_history(session, self.max_history_turns)
-        summary = session.get("conversation_summary", "No summary yet.")
-        # --- END NEW ---
-
-
-        plan_json = None
-        final_context = {}
-        error_msg = None
-        results_count = 0
-        
-        outcome = "FAIL_UNKNOWN"
-        execution_mode = "primary"
-        collected_docs = []
-        
-        try:
-            max_retries = 5
-            tool_call_json = None
-
-            # ADD THIS ENTIRE BLOCK before the 'for attempt...' loop
-
-            # --- 3. ADD PLANNER START TIME ---
-            planner_start_time = time.time()
-
-            # (This is the replacement block)
-
-            coref_params = self._coref_to_params(query, session)
-            if coref_params:
-                self.debug(f"Injecting coreference params into query: {coref_params}")
-                query = f"{query}\n\n[System Hint: The pronoun in the query (he/she/his/her) refers to: {coref_params.get('person_name')}]"
-            # --- END: Coreference-to-Parameter Injection ---
-
-            # --- NEW: Flag for 422 Error Retry ---
-            filters_cleared_on_retry = False
-
-            for attempt in range(max_retries):
-                self.debug(f"Planner Attempt {attempt + 1}/{max_retries}...")
-                
-                # --- START: Prompt Generation (Now INSIDE the loop) ---
-                # --- START: Prompt Generation (Now INSIDE the loop) --
-                
-                if is_ambiguous:
-                    self.debug("-> Ambiguity detected. Using 'Grounded Ambiguity Resolver Prompt'.")
-                    sys_prompt = PROMPT_TEMPLATES["ambiguity_resolver_prompt"].format(db_schema_summary=self.db_schema_summary)
-                    planner_user_prompt = query
-                
-
-
-                # --- NEW 422-AWARE PROMPT LOGIC ---
-                elif filters_cleared_on_retry:
-                    # This is a 422-RECOVERY ATTEMPT.
-                    self.debug("!!! 422 Recovery: Retrying with a minimal prompt (no context, no examples).")
+                for attempt in range(max_retries):
+                    self.debug(f"Planner Attempt {attempt + 1}/{max_retries}...")
                     
-                    # 1. Use a completely empty context.
-                    planner_context = {
-                        "current_topic": "None.",
-                        "active_filters": {}
-                    }
+                    # --- Simplified Prompt Generation (Offline) ---
+                    self.debug("-> Using 'Offline Planner Prompt' (no context, no examples).")
+                    dynamic_examples = "" # No examples for offline
+                    
+                    # Use a minimal, empty context
+                    planner_context = {"current_topic": "None.", "active_filters": {}}
                     structured_context_str = json.dumps(planner_context, indent=2)
+                    sys_prompt_template = PROMPT_TEMPLATES["planner_agent"]
+                    history_for_llm = [] # No history for offline
                     
-                    # 2. Use no dynamic examples.
-                    dynamic_examples = ""
-
-                    # 3. Set the system prompt.
-                    sys_prompt = PROMPT_TEMPLATES["planner_agent"].format(
-                        all_programs_list=self.all_programs,
-                        all_departments_list=self.all_departments,
-                        all_positions_list=self.all_positions,
-                        all_doc_types_list=self.all_doc_types,
-                        all_statuses_list=self.all_statuses,
-                        dynamic_examples=dynamic_examples, # This is now ""
-                        structured_context_str=structured_context_str # This is now clean
-                    )
-                    planner_user_prompt = query
-
-                else:
-                    # This is a NORMAL FIRST ATTEMPT.
-                    self.debug("-> Query appears complete. Using 'Full Planner Prompt' with context.")
-                    
-                    # 1. Load dynamic examples.
-                    dynamic_examples = self._load_dynamic_examples(query)
-                    if dynamic_examples:
-                        self.debug("Sanitizing dynamic examples string for fragile API...")
-                        dynamic_examples = dynamic_examples.replace('\n', ' ').replace('"', '\\"')
-
-                    # 2. Load the "smart guess" context.
-                    full_context = session.get("structured_context", {})
-                    planner_context = {
-                        "current_topic": full_context.get("current_topic"),
-                        "active_filters": {} # Default to empty
-                    }
-                    
-                    query_lower = query.strip().lower()
-                    new_topic_starters = ["who is", "what is", "what are", "show me", "list", "find", "get", "compare"]
-                    is_new_topic = any(query_lower.startswith(starter) for starter in new_topic_starters)
-                    
-                    if not is_new_topic:
-                        self.debug("Query seems like a follow-up. Passing active filters.")
-                        planner_context["active_filters"] = full_context.get("active_filters", {})
-                    else:
-                        self.debug("Query seems like a new topic. Wiping active filters for Planner.")
-                    
-                    structured_context_str = json.dumps(planner_context, indent=2)
-                    self.debug(f"Sending pruned context to Planner: {structured_context_str}")
-
-                    # --- THIS IS THE FIX ---
-                    # 3. Set the system prompt.
-                    #    We will create a "prompt-safe" list of positions
-                    #    that includes our main generic words.
-                    
-                    # Make a copy of the real positions list
-                    prompt_safe_positions = list(self.all_positions) 
-                    
-                    # Add the generic words the AI gets stuck on.
-                    # We add them with a capital letter to match the others.
-                    prompt_safe_positions.extend(["Faculty", "Staff", "Admin"])
-                    
-                    # 3. Set the system prompt.
-                    sys_prompt = PROMPT_TEMPLATES["planner_agent"].format(
-                        all_programs_list=self.all_programs,
-                        all_departments_list=self.all_departments,
+                    # Format the system prompt
+                    prompt_safe_positions = list(self.all_positions) + ["Faculty", "Staff", "Admin"]
+                    sys_prompt = sys_prompt_template.format(
+                        all_programs_list=self.all_programs, all_departments_list=self.all_departments,
                         all_positions_list=sorted(list(set(prompt_safe_positions))),
-                        all_doc_types_list=self.all_doc_types,
-                        all_statuses_list=self.all_statuses,
-                        dynamic_examples=dynamic_examples, # Populated
-                        structured_context_str=structured_context_str # Populated
+                        all_doc_types_list=self.all_doc_types, all_statuses_list=self.all_statuses,
+                        dynamic_examples=dynamic_examples,
+                        structured_context_str=structured_context_str
                     )
                     planner_user_prompt = query
-                # --- END: Prompt Generation ---
+                    # --- End Simplified Prompt Generation ---
 
-                plan_raw = self.planner_llm.execute(
-                    system_prompt=sys_prompt,
-                    user_prompt=planner_user_prompt,
-                    json_mode=True, phase="planner",
-                    history=chat_history if not filters_cleared_on_retry else []
-                )
-        
-                tool_call_json = self._repair_json(plan_raw)
-                
-                if tool_call_json and "tool_name" in tool_call_json:
-                    self.debug(f"Valid tool selected on attempt {attempt + 1}.")
-                    plan_json = {"plan": [{"tool_call": tool_call_json}]}
-                    break # Success!
-                
-                # --- THIS IS YOUR NEW LOGIC ---
-                if "422" in plan_raw:
-                    self.debug("!!! 422 Error detected. The API rejected the context.")
-                    if not filters_cleared_on_retry:
-                        self.debug("   -> Will retry ONCE with all active_filters cleared.")
-                        filters_cleared_on_retry = True # Set flag to retry with clean filters
-                        is_ambiguous = False # Ensure we don't re-run ambiguity logic
-                    else:
-                        self.debug("   -> Already retried with cleared filters. Failing permanently.")
-                        break # We already tried the clean prompt, so we must give up.
-                else:
-                    self.debug(f"Attempt {attempt + 1} failed (Not a 422). Retrying...")
-                # --- END OF NEW LOGIC ---
-
-                time.sleep(1) # Wait 1 sec before any retry
+                    plan_raw = self.planner_llm.execute(
+                        system_prompt=sys_prompt, user_prompt=planner_user_prompt,
+                        json_mode=True, phase="planner",
+                        history=history_for_llm
+                    )
             
-            if not tool_call_json:
-                outcome = "FAIL_PLANNER"
+                    plan_json = self._repair_json(plan_raw)
+                    
+                    # --- Plan Validation (Same as Online) ---
+                    is_valid_plan, validation_error = self._validate_plan(plan_json)
+
+                    if is_valid_plan:
+                        self.debug(f"Valid multi-step plan received on attempt {attempt + 1}.")
+                        break # Success!
+                    
+                    self.debug(f"Plan validation failed: {validation_error}")
+                    plan_json = None # Invalidate the broken plan
+                    time.sleep(1)
+                
                 planner_duration = time.time() - planner_start_time
-                raise ValueError(f"AI failed to select a valid tool after {max_retries} attempts. Last error: {plan_raw}")
-
-            # (The rest of the function continues from here...)
-            # --- 5. ADD PLANNER DURATION (ON SUCCESS) ---
                 
+                if not plan_json:
+                    outcome = "FAIL_PLANNER"
+                    raise ValueError(f"AI failed to select a valid plan after {max_retries} attempts. Last error: {plan_raw}")
 
+                # --- Multi-Step Execution Loop (Same as Online) ---
+                retrieval_start_time = time.time()
+                step_results = {}
+                collected_docs = []
+                plan_steps = plan_json.get("plan", [])
+
+                for i, step in enumerate(plan_steps):
+                    step_num = i + 1
+                    tool_call = step.get("tool_call", {})
+                    tool_name = tool_call.get("tool_name")
+                    params = tool_call.get("parameters", {})
+                    
+                    if not tool_name:
+                        self.debug(f"Step {step_num} is missing a tool_name. Stopping plan.")
+                        break
+                    
+                    try:
+                        resolved_params = self._resolve_placeholders(params, step_results)
+                        params_str = json.dumps(resolved_params)
+                        if '$' in params_str:
+                            unresolved = [v for v in re.findall(r'"(\$.*?)"', params_str)]
+                            if unresolved:
+                                raise ValueError(f"Plan failed at step {step_num}: Required value {unresolved[0]} was not found.")
+                        self.debug(f"   -> Executing Step {step_num}: {tool_name} with params: {resolved_params}")
+                    
+                    except Exception as e:
+                        self.debug(f"Error during placeholder resolution or execution for step {step_num}: {e}")
+                        raise
+                    
+                    if tool_name == "finish_plan":
+                        self.debug("Plan execution complete.")
+                        break
+                    
+                    if tool_name in self.available_tools:
+                        tool_function = self.available_tools[tool_name]
+                        sig = inspect.signature(tool_function)
+                        valid_params = {k: v for k, v in resolved_params.items() if k in sig.parameters}
+                        dropped = [k for k in resolved_params if k not in sig.parameters]
+                        if dropped:
+                            self.debug(f"Dropping unexpected parameters for {tool_name}: {dropped}")
+                        
+                        step_output = tool_function(**valid_params)
+                        step_output_list = step_output if isinstance(step_output, list) else [step_output]
+                        step_results[step_num] = step_output_list
+                        collected_docs.extend(step_output_list)
+                    else:
+                        raise ValueError(f"Plan step {step_num} uses an unknown tool: '{tool_name}'")
+                
+                retrieval_duration = time.time() - retrieval_start_time
+                collected_docs = [doc for doc in collected_docs if doc.get("source_collection") not in ("system_signal", "system_note")]
+                
+                has_errors = any("error" in doc.get("status", "") for doc in collected_docs)
+                is_empty = (not collected_docs or all("empty" in doc.get("status", "") for doc in collected_docs)) and not has_errors
+
+                if has_errors:
+                    execution_mode = "primary"
+                    self.debug(f"Primary plan failed with an error. Reporting as FAIL_EXECUTION.")
+                    outcome = "FAIL_EXECUTION"
+                
+                elif is_empty:
+                    self.debug("Primary plan executed successfully but found no results. (FAIL_EMPTY)")
+                    outcome = "FAIL_EMPTY"
+                
+                else:
+                    outcome = "SUCCESS_DIRECT"
+
+                # --- De-duplication (Same as Online) ---
+                if collected_docs:
+                    self.debug(f"Original unfiltered doc count: {len(collected_docs)}. Starting de-duplication...")
+                    unique_docs = {}
+                    for doc in collected_docs:
+                        try: content_key = json.dumps(doc.get('content'), sort_keys=True)
+                        except TypeError: content_key = str(doc.get('content')) 
+                        if content_key and content_key not in unique_docs:
+                            unique_docs[content_key] = doc
+                    collected_docs = list(unique_docs.values())
+                    self.debug(f"Found {len(collected_docs)} unique documents after de-duplication.")
+
+                # --- Student Grouping (Same as Online) ---
+                if len(collected_docs) > 5:
+                    primary_tool_name = ""
+                    if plan_json and plan_json.get("plan"):
+                        primary_tool_name = plan_json.get("plan", [{}])[0].get("tool_call", {}).get("tool_name", "")
+                    
+                    first_doc_meta = collected_docs[0].get("metadata", {})
+                    is_student_data = "student_id" in first_doc_meta
+
+                    if is_student_data and primary_tool_name == "find_people":
+                        self.debug(f"-> Student result set ({len(collected_docs)} docs) detected for 'find_people'. Restructuring into groups.")
+                        grouped_students = defaultdict(list)
+                        for doc in collected_docs:
+                            meta = doc.get("metadata", {})
+                            group_key = f"{meta.get('course', 'N/A')} - Year {meta.get('year', 'N/A')} - Section {meta.get('section', 'N/A')}"
+                            grouped_students[group_key].append(doc)
+                        grouped_data = [{"source_collection": "grouped_students", "group_name": name, "students": docs} for name, docs in sorted(grouped_students.items())]
+                        collected_docs = grouped_data
+                    elif is_student_data:
+                        self.debug(f"-> Skipping student grouping. Primary tool was '{primary_tool_name}', not 'find_people'.")
+
+                self.debug("\n" + "="*50)
+                self.debug(f"📑 Final {len(collected_docs)} documents being sent to Synthesizer:")
+                try:
+                    debug_output = json.dumps(collected_docs, indent=2)
+                    print(debug_output)
+                except Exception as e:
+                    print(f"Could not print debug output: {e}")
+                self.debug("="*50 + "\n")
+
+                if outcome in ["SUCCESS_DIRECT", "SUCCESS_FALLBACK"]:
+                    results_count = len(collected_docs)
+                    self.debug(f"Cleaning {results_count} docs for Synthesizer...")
+                    cleaned_docs_for_synth = self._clean_documents_for_synthesizer(collected_docs)
+                    final_context = {
+                        "status": "success",
+                        "summary": f"Found {results_count} relevant document(s).",
+                        "data": cleaned_docs_for_synth[:30]
+                    }
+                else:
+                    final_context = {"status": "empty", "summary": "I tried a precise search, but could not find any relevant documents."}
+
+            except Exception as e:
+                if planner_duration == 0.0 and 'planner_start_time' in locals():
+                    planner_duration = time.time() - planner_start_time
+                if retrieval_duration == 0.0 and 'retrieval_start_time' in locals():
+                    retrieval_duration = time.time() - retrieval_start_time
+                import traceback
+                self.debug(f"An unexpected error occurred: {e}")
+                self.debug(f"Error Type: {type(e)}")
+                self.debug(f"Traceback: {traceback.format_exc()}")
+                error_msg = str(e)
+                if outcome == "FAIL_UNKNOWN":
+                    outcome = "FAIL_EXECUTION"
+                final_context = {"status": "error", "summary": f"I ran into a technical problem: {e}"}
+
+            # --- Synthesizer Block (Same as Online) ---
+            self.debug("Synthesizing final answer...")
+            synth_start_time = time.time()
+            context_for_llm = json.dumps(final_context, indent=2, ensure_ascii=False)
+            synth_prompt = PROMPT_TEMPLATES["final_synthesizer"].format(context=context_for_llm, query=query)
             
+            final_answer = self.synth_llm.execute(
+                system_prompt="You are a careful AI analyst who provides conversational answers based only on the provided facts.",
+                user_prompt=synth_prompt, 
+                history=chat_history, # Will be [] for offline mode
+                phase="synth"
+            )
+            synth_duration = time.time() - synth_start_time
 
-            # --- 5. ADD PLANNER DURATION (ON SUCCESS) ---
-            planner_duration = time.time() - planner_start_time
+            # --- Post-Synthesis Block (Same as Online) ---
+            corruption_details = sorted(list(self.corruption_warnings)) if self.corruption_warnings else None
+            final_plan_hash = None 
 
-            # 2. Execute the validated tool call
-            tool_name = tool_call_json["tool_name"]
-            params = tool_call_json.get("parameters", {})
+            try:
+                failure_keywords = ["i'm sorry", "unfortunately", "i couldn't find", "i am unable", "not available", "technical problem"]
+                is_successful_answer = not any(keyword in final_answer.lower() for keyword in failure_keywords)
+                if outcome.startswith("SUCCESS") and is_successful_answer and plan_json:
+                    self.debug("Saving example to memory: SUCCESS and final answer looks good.")
+                    final_plan_hash = self._save_dynamic_example(query, plan_json, session, outcome)
+                elif outcome.startswith("SUCCESS"):
+                    self.debug("Skipping example save: Final answer looked like a soft failure.")
+            except Exception as e:
+                self.debug(f"Post-synthesis evaluation or example saving failed: {e}")
 
-            # --- NEW: DEDICATED PATH FOR CONVERSATIONAL QUERIES ---
-            if tool_name == "answer_conversational_query":
-                self.debug("-> Handling conversational query with a dedicated synth call.")
+            # --- Logging Block (Same as Online) ---
+            execution_time = time.time() - start_time
+            self.training_system.record_query_result(
+                query=query, plan=plan_json, results_count=results_count,
+                execution_time=execution_time, error_msg=error_msg,
+                execution_mode=execution_mode, outcome=outcome, analyst_mode=self.execution_mode,
+                final_answer=final_answer, corruption_details=corruption_details,
+                timestamp=start_datetime, session_id=session.get('session_id'),
+                planner_duration=planner_duration, retrieval_duration=retrieval_duration,
+                synth_duration=synth_duration, planner_model=self.planner_llm.planner_model,
+                synth_model=self.synth_llm.synth_model, plan_hash=final_plan_hash
+            )
+            
+            return final_answer, plan_json, collected_docs
+            # --- END OFFLINE EXECUTION PATH ---
 
-                # --- 6. ADD SYNTH START/END FOR CONVO ---
+        else:
+            # --- START ONLINE/SPLIT EXECUTION PATH (Original Code) ---
+            self.debug("Starting reasoning plan execution...")
+            # Note: start_time, start_datetime, durations, and context were initialized above
+            
+            # --- "MINI-LLM" TRIAGE STEP ---
+            triage_result = self._run_query_triage(query, session)
+            intent = triage_result.get("intent")
+            
+            if intent == "ANSWER_TO_CLARIFICATION":
+                query = triage_result.get("combined_query", query)
+                context["clarification_pending"] = False
+                self.debug(f"Triage: Proceeding with combined query: {query}")
+                
+            elif intent == "CONVERSATIONAL":
+                self.debug("Triage: Query is conversational. Routing to dedicated synth call.")
+                planner_start_time = time.time()
+                chat_history = self._get_topic_scoped_history(session, self.max_history_turns)
+                planner_duration = time.time() - planner_start_time
+
                 synth_start_time = time.time()
                 final_answer = self.synth_llm.execute(
                     system_prompt="You are a friendly and helpful AI assistant for PDM. Respond naturally and conversationally to the user.",
@@ -3283,316 +3647,947 @@ class AIAnalyst:
                     phase="synth"
                 )
                 synth_duration = time.time() - synth_start_time
-                # --- END OF ADDITION ---
-                
-                
-
                 execution_time = time.time() - start_time
-
-                # --- 7. MODIFY THIS LOGGING CALL ---
-                self.training_system.record_query_result(
-                    query=query, 
-                    plan=plan_json, 
-                    outcome="SUCCESS_CONVERSATIONAL", 
-                    execution_time=execution_time, 
-                    final_answer=final_answer, 
-                    results_count=0,
-                    
-                    # --- ADD THESE FIELDS ---
-                    timestamp=start_datetime,
-                    session_id=session.get('session_id'),
-                    planner_duration=planner_duration,
-                    retrieval_duration=0.0, # No retrieval done
-                    synth_duration=synth_duration,
-                    planner_model=self.planner_llm.planner_model,
-                    synth_model=self.synth_llm.synth_model,
-                    plan_hash=plan_hash # No plan hash for simple convo
-                    # --- END OF ADDITION ---
-                )
-                return final_answer, plan_json, []
-            # --- END OF NEW PATH ---
-
-
-            
-            collected_docs = []
-
-            # --- 8. ADD RETRIEVAL START TIME ---
-            retrieval_start_time = time.time()
-
-            tool_name = plan_json.get("plan", [{}])[0].get("tool_call", {}).get("tool_name")
-            if tool_name == "request_clarification":
-                self.debug("Plan requires clarification. Setting state and asking user.")
                 
-                # Set the "Post-it note" memory
+                self.training_system.record_query_result(
+                    query=query, plan={"plan": [{"tool_call": {"tool_name": "answer_conversational_query"}}]}, 
+                    outcome="SUCCESS_CONVERSATIONAL", 
+                    execution_time=execution_time, final_answer=final_answer, results_count=0,
+                    timestamp=start_datetime, session_id=session.get('session_id'),
+                    planner_duration=planner_duration, retrieval_duration=0.0, synth_duration=synth_duration,
+                    planner_model=self.planner_llm.planner_model, synth_model=self.synth_llm.synth_model,
+                    plan_hash=None
+                )
+                return final_answer, {"plan": [{"tool_call": {"tool_name": "answer_conversational_query"}}]}, []
+
+            elif intent == "NEW_AMBIGUOUS_QUERY":
+                self.debug("Triage: Query is new and ambiguous. Forcing clarification.")
+                planner_start_time = time.time()
+                sys_prompt = PROMPT_TEMPLATES["ambiguity_resolver_prompt"].format(db_schema_summary=self.db_schema_summary)
+                plan_raw = self.planner_llm.execute(
+                    system_prompt=sys_prompt, user_prompt=query,
+                    json_mode=True, phase="planner", history=[]
+                )
+                plan_json = self._repair_json(plan_raw)
+                planner_duration = time.time() - planner_start_time
+                
+                try:
+                    tool_call = plan_json.get("plan", [{}])[0].get("tool_call", {})
+                    if tool_call.get("tool_name") == "request_clarification":
+                        question_for_user = tool_call.get("parameters", {}).get("question_for_user", "Could you provide more details?")
+                    else:
+                        question_for_user = "I'm sorry, I'm not sure what you mean. Could you provide more details?"
+                except Exception:
+                    question_for_user = "I'm not sure what you mean. Could you rephrase that?"
+                
                 context["clarification_pending"] = True
                 context["original_ambiguous_query"] = query
-                
-                # Extract the question for the user from the plan
-                question_for_user = plan_json["plan"][0]["tool_call"]["parameters"]["question_for_user"]
-
-                # --- 9. ADD RETRIEVAL DURATION (ON CLARIFICATION) ---
-                retrieval_duration = time.time() - retrieval_start_time
-
-                # Update the session in the database with the pending state
+                self.sessions_collection.update_one(
+                    {"session_id": session["session_id"]},
+                    {"$set": {"structured_context": context, "updated_at": datetime.now(timezone.utc)}},
+                    upsert=True
+                )
                 self._update_session_history(session['session_id'], query, question_for_user)
-
-                # Return the question directly to the user
                 return question_for_user, plan_json, []
-                
+
+            # --- END OF TRIAGE LOGIC ---
             
-            if tool_name in self.available_tools:
-                tool_function = self.available_tools[tool_name]
+            chat_history = self._get_topic_scoped_history(session, self.max_history_turns)
+            summary = session.get("conversation_summary", "No summary yet.")
+            
+            plan_json = None
+            final_context = {}
+            error_msg = None
+            results_count = 0
+            
+            outcome = "FAIL_UNKNOWN"
+            execution_mode = "primary"
+            collected_docs = []
+            
+            try:
+                max_retries = 5
+                planner_start_time = time.time()
 
-                # Filter out unexpected parameters to prevent errors
-                import inspect
-                sig = inspect.signature(tool_function)
-                valid_params = {k: v for k, v in params.items() if k in sig.parameters}
-                dropped = [k for k in params if k not in sig.parameters]
-                if dropped:
-                    self.debug(f"Dropping unexpected parameters for {tool_name}: {dropped}")
+                coref_params = self._coref_to_params(query, session)
+                if coref_params:
+                    self.debug(f"Injecting coreference params into query: {coref_params}")
+                    query = f"{query}\n\n[System Hint: The pronoun in the query (he/she/his/her) refers to: {coref_params.get('person_name')}]"
+                
+                filters_cleared_on_retry = False
 
-                self.debug(f"   -> Executing primary tool: {tool_name} with params: {valid_params}")
-                results = tool_function(**valid_params)
-                collected_docs = results if isinstance(results, list) else [results]
-            else:
-                raise ValueError(f"AI selected an unknown tool: '{tool_name}'")
-
-
-            # 3. Fallback Logic: If the primary tool fails, try a broad semantic search
-            primary_tool_failed = not collected_docs or "error" in collected_docs[0].get("status", "") or "empty" in collected_docs[0].get("status", "")
-
-            if primary_tool_failed:
-                execution_mode = "fallback" # Update execution mode
-                self.debug(f"Primary tool '{tool_name}' failed or found nothing. Attempting fallback semantic search.")
-                fallback_docs = self._execute_smart_fallback_search(query)
-                if fallback_docs:
-                    self.debug(f"Fallback search found {len(fallback_docs)} documents.")
-                    summary_doc = {
-                        "source_collection": "system_note",
-                        "content": f"Note: The initial targeted search for tool '{tool_name}' failed. The following are broader, semantically related results for your query.",
-                        "metadata": {}
-                    }
-                    collected_docs = [summary_doc] + fallback_docs
-                    outcome = "SUCCESS_FALLBACK" # Update outcome
-                else:
-                    self.debug("Fallback search also found nothing.")
-                    outcome = "FAIL_EMPTY" # Update outcome
-            else:
-                outcome = "SUCCESS_DIRECT" # Primary tool succeeded
-
-
-                # --- ✨ TEMP FIX: De-duplicate results before sending to Synthesizer ---
-            if collected_docs:
-
-                self.debug(f"Original unfiltered doc count: {len(collected_docs)}. Starting de-duplication...")
-                unique_docs = {}
-                for doc in collected_docs:
-                    # --- START MODIFICATION ---
-                    # Get the content field
-                    content_value = doc.get('content')
+                for attempt in range(max_retries):
+                    self.debug(f"Planner Attempt {attempt + 1}/{max_retries}...")
                     
-                    # Convert content to a hashable string key (JSON representation)
-                    # Use sort_keys=True for consistency if content is a dict
-                    try:
-                        content_key = json.dumps(content_value, sort_keys=True)
-                    except TypeError:
-                        # Fallback if content is somehow not JSON serializable (unlikely)
-                        content_key = str(content_value) 
+                    if filters_cleared_on_retry:
+                        self.debug("!!! 422 Recovery: Retrying with a minimal prompt (no context, no examples).")
+                        planner_context = {"current_topic": "None.", "active_filters": {}}
+                        structured_context_str = json.dumps(planner_context, indent=2)
+                        dynamic_examples = ""
+                        sys_prompt_template = PROMPT_TEMPLATES["planner_agent"]
+                        history_for_llm = []
+                    else:
+                        self.debug("-> Using 'Full Planner Prompt' with context.")
+                        dynamic_examples = self._load_dynamic_examples(query)
                         
-                    # Now use the guaranteed-string key for de-duplication
-                    if content_key and content_key not in unique_docs:
-                         unique_docs[content_key] = doc
-                    # --- END MODIFICATION --- 
-                deduplicated_list = list(unique_docs.values())
-                self.debug(f"Found {len(deduplicated_list)} unique documents after de-duplication.")
-                # Replace the original list with the clean, de-duplicated one.
-                collected_docs = deduplicated_list
-            # --- ✨ END TEMP FIX ---
-
-
-
-            # In AI.py, inside the execute_reasoning_plan method:
-
-            # In analyst.py, inside execute_reasoning_plan...
-
-            # --- POLISHED & STRUCTURED GROUPING LOGIC ---
-            if len(collected_docs) > 5:
-                first_doc_meta = collected_docs[0].get("metadata", {})
-                # Check if the data is about students
-                is_student_data = "student_id" in first_doc_meta
-
-                if is_student_data:
-                    self.debug(f"-> Student result set ({len(collected_docs)} docs) detected. Restructuring into groups.")
+                        full_context = session.get("structured_context", {})
+                        planner_context = {
+                            "current_topic": full_context.get("current_topic"),
+                            "active_filters": {}
+                        }
+                        query_lower = query.strip().lower()
+                        new_topic_starters = ["who is", "what is", "what are", "show me", "list", "find", "get", "compare"]
+                        is_new_topic = any(query_lower.startswith(starter) for starter in new_topic_starters)
+                        
+                        if not is_new_topic:
+                            self.debug("Query seems like a follow-up. Passing active filters.")
+                            planner_context["active_filters"] = full_context.get("active_filters", {})
+                        else:
+                            self.debug("Query seems like a new topic. Wiping active filters for Planner.")
+                        
+                        structured_context_str = json.dumps(planner_context, indent=2)
+                        self.debug(f"Sending pruned context to Planner: {structured_context_str}")
+                        sys_prompt_template = PROMPT_TEMPLATES["planner_agent"]
+                        history_for_llm = chat_history
                     
-                    from collections import defaultdict
-                    grouped_students = defaultdict(list)
+                    prompt_safe_positions = list(self.all_positions) + ["Faculty", "Staff", "Admin"]
+                    sys_prompt = sys_prompt_template.format(
+                        all_programs_list=self.all_programs, all_departments_list=self.all_departments,
+                        all_positions_list=sorted(list(set(prompt_safe_positions))),
+                        all_doc_types_list=self.all_doc_types, all_statuses_list=self.all_statuses,
+                        dynamic_examples=dynamic_examples,
+                        structured_context_str=structured_context_str
+                    )
+                    planner_user_prompt = query
+
+                    plan_raw = self.planner_llm.execute(
+                        system_prompt=sys_prompt, user_prompt=planner_user_prompt,
+                        json_mode=True, phase="planner",
+                        history=history_for_llm
+                    )
+            
+                    plan_json = self._repair_json(plan_raw)
                     
-                    # Group the full, original document objects by their course, year, and section
-                    for doc in collected_docs:
-                        meta = doc.get("metadata", {})
-                        course = meta.get("course", "N/A")
-                        year = meta.get("year", "N/A")
-                        section = meta.get("section", "N/A")
-                        group_key = f"{course} - Year {year} - Section {section}"
-                        # Append the whole document to the group, preserving all data
-                        grouped_students[group_key].append(doc)
+                    is_valid_plan, validation_error = self._validate_plan(plan_json)
+
+                    if is_valid_plan:
+                        self.debug(f"Valid multi-step plan received on attempt {attempt + 1}.")
+                        break
                     
-                    # Create a new list of structured group objects for the AI
-                    grouped_data = []
-                    for group_name, docs in sorted(grouped_students.items()):
-                        grouped_data.append({
-                            "source_collection": "grouped_students",
-                            "group_name": group_name,
-                            "students": docs  # This key holds a list of the full student documents
-                        })
-
-                    # Replace the flat list of documents with our new list of structured groups
-                    collected_docs = grouped_data
-            # --- END OF POLISHED LOGIC ---
-
-                # --- ✨ START: DEBUG CODE TO SHOW RETRIEVED DOCS ---
-            self.debug("\n" + "="*50)
-            self.debug(f" Final {len(collected_docs)} documents being sent to Synthesizer:")
-            # Pretty-print the JSON to the console
-            debug_output = json.dumps(collected_docs, indent=2)
-            print(debug_output)
-            self.debug("="*50 + "\n")
-            # --- ✨ END: DEBUG CODE ---
-
-            # --- 10. ADD RETRIEVAL DURATION (ON SUCCESS/FALLBACK) ---
-            retrieval_duration = time.time() - retrieval_start_time
-
-            # 4. Build the final context for the synthesizer
-            if outcome in ["SUCCESS_DIRECT", "SUCCESS_FALLBACK"]:
-                results_count = len(collected_docs)
-                # --- NEW: Clean the docs before sending to Synthesizer ---
-                self.debug(f"Cleaning {results_count} docs for Synthesizer...")
-                cleaned_docs_for_synth = self._clean_documents_for_synthesizer(collected_docs)
-                # --- END NEW ---
-                final_context = {
-                    "status": "success",
-                    "summary": f"Found {results_count} relevant document(s).",
-                    "data": collected_docs[:30] # Limit context size
-                }
-            else:
-                final_context = {"status": "empty", "summary": "I tried a precise search and a broad search, but could not find any relevant documents."}
-
-
-        # In the execute_reasoning_plan function...
-
-        except Exception as e:
-            # --- 11. ADD DURATION CAPTURE (ON EXCEPTION) ---
-            if planner_duration == 0.0 and 'planner_start_time' in locals():
+                    self.debug(f"Plan validation failed: {validation_error}")
+                    plan_json = None
+                    
+                    if "422" in plan_raw:
+                        self.debug("!!! 422 Error detected. The API rejected the context.")
+                        if not filters_cleared_on_retry:
+                            self.debug("   -> Will retry ONCE with all active_filters cleared.")
+                            filters_cleared_on_retry = True
+                        else:
+                            self.debug("   -> Already retried with cleared filters. Failing permanently.")
+                            break
+                    else:
+                        self.debug(f"Attempt {attempt + 1} failed (Not a 422). Retrying...")
+                    time.sleep(1)
+                
                 planner_duration = time.time() - planner_start_time
-            if retrieval_duration == 0.0 and 'retrieval_start_time' in locals():
+                
+                if not plan_json:
+                    outcome = "FAIL_PLANNER"
+                    raise ValueError(f"AI failed to select a valid plan after {max_retries} attempts. Last error: {plan_raw}")
+
+                # --- Multi-Step Execution Loop ---
+                retrieval_start_time = time.time()
+                step_results = {}
+                collected_docs = []
+                plan_steps = plan_json.get("plan", [])
+
+                for i, step in enumerate(plan_steps):
+                    step_num = i + 1
+                    tool_call = step.get("tool_call", {})
+                    tool_name = tool_call.get("tool_name")
+                    params = tool_call.get("parameters", {})
+                    
+                    if not tool_name:
+                        self.debug(f"Step {step_num} is missing a tool_name. Stopping plan.")
+                        break
+                    
+                    try:
+                        resolved_params = self._resolve_placeholders(params, step_results)
+                        params_str = json.dumps(resolved_params)
+                        if '$' in params_str:
+                            unresolved = [v for v in re.findall(r'"(\$.*?)"', params_str)]
+                            if unresolved:
+                                raise ValueError(f"Plan failed at step {step_num}: Required value {unresolved[0]} was not found.")
+                        self.debug(f"   -> Executing Step {step_num}: {tool_name} with params: {resolved_params}")
+                    
+                    except Exception as e:
+                        self.debug(f"Error during placeholder resolution or execution for step {step_num}: {e}")
+                        raise
+                    
+                    if tool_name == "finish_plan":
+                        self.debug("Plan execution complete.")
+                        break
+                    
+                    if tool_name in self.available_tools:
+                        tool_function = self.available_tools[tool_name]
+                        sig = inspect.signature(tool_function)
+                        valid_params = {k: v for k, v in resolved_params.items() if k in sig.parameters}
+                        dropped = [k for k in resolved_params if k not in sig.parameters]
+                        if dropped:
+                            self.debug(f"Dropping unexpected parameters for {tool_name}: {dropped}")
+                        
+                        step_output = tool_function(**valid_params)
+                        step_output_list = step_output if isinstance(step_output, list) else [step_output]
+                        step_results[step_num] = step_output_list
+                        collected_docs.extend(step_output_list)
+                    else:
+                        raise ValueError(f"Plan step {step_num} uses an unknown tool: '{tool_name}'")
+                
                 retrieval_duration = time.time() - retrieval_start_time
-            # --- END OF ADDITION ---
+                collected_docs = [doc for doc in collected_docs if doc.get("source_collection") not in ("system_signal", "system_note")]
+                
+                has_errors = any("error" in doc.get("status", "") for doc in collected_docs)
+                is_empty = (not collected_docs or all("empty" in doc.get("status", "") for doc in collected_docs)) and not has_errors
 
-            # ⬇️ REPLACE THE EXISTING DEBUG LINE WITH THESE THREE LINES ⬇️
-            import traceback
-            self.debug(f"An unexpected error occurred: {e}")
-            self.debug(f"Error Type: {type(e)}")
-            self.debug(f"Traceback: {traceback.format_exc()}")
-            # ⬆️ END OF CHANGE ⬆️
+                if has_errors:
+                    execution_mode = "primary"
+                    self.debug(f"Primary plan failed with an error. Reporting as FAIL_EXECUTION.")
+                    outcome = "FAIL_EXECUTION"
+                
+                elif is_empty:
+                    self.debug("Primary plan executed successfully but found no results. (FAIL_EMPTY)")
+                    outcome = "FAIL_EMPTY"
+                
+                else:
+                    outcome = "SUCCESS_DIRECT"
 
-            error_msg = str(e)
-            # If the outcome hasn't been set by the planner failure, it's an execution failure
-            if outcome == "FAIL_UNKNOWN":
-                outcome = "FAIL_EXECUTION"
-            final_context = {"status": "error", "summary": f"I ran into a technical problem: {e}"}
+                if collected_docs:
+                    self.debug(f"Original unfiltered doc count: {len(collected_docs)}. Starting de-duplication...")
+                    unique_docs = {}
+                    for doc in collected_docs:
+                        try: content_key = json.dumps(doc.get('content'), sort_keys=True)
+                        except TypeError: content_key = str(doc.get('content')) 
+                        if content_key and content_key not in unique_docs:
+                            unique_docs[content_key] = doc
+                    collected_docs = list(unique_docs.values())
+                    self.debug(f"Found {len(collected_docs)} unique documents after de-duplication.")
 
-        # 5. Synthesize the final answer
-        self.debug("Synthesizing final answer...")
+                if len(collected_docs) > 5:
+                    primary_tool_name = ""
+                    if plan_json and plan_json.get("plan"):
+                        primary_tool_name = plan_json.get("plan", [{}])[0].get("tool_call", {}).get("tool_name", "")
+                    
+                    first_doc_meta = collected_docs[0].get("metadata", {})
+                    is_student_data = "student_id" in first_doc_meta
 
-        # --- 12. ADD SYNTHESIZER START TIME ---
-        synth_start_time = time.time()
+                    if is_student_data and primary_tool_name == "find_people":
+                        self.debug(f"-> Student result set ({len(collected_docs)} docs) detected for 'find_people'. Restructuring into groups.")
+                        grouped_students = defaultdict(list)
+                        for doc in collected_docs:
+                            meta = doc.get("metadata", {})
+                            group_key = f"{meta.get('course', 'N/A')} - Year {meta.get('year', 'N/A')} - Section {meta.get('section', 'N/A')}"
+                            grouped_students[group_key].append(doc)
+                        grouped_data = [{"source_collection": "grouped_students", "group_name": name, "students": docs} for name, docs in sorted(grouped_students.items())]
+                        collected_docs = grouped_data
+                    elif is_student_data:
+                        self.debug(f"-> Skipping student grouping. Primary tool was '{primary_tool_name}', not 'find_people'.")
 
-        plan_hash = None # Initialize plan_hash
-        context_for_llm = json.dumps(final_context, indent=2, ensure_ascii=False)
-        synth_prompt = PROMPT_TEMPLATES["final_synthesizer"].format(context=context_for_llm, query=query)
-        final_answer = self.synth_llm.execute(
-            system_prompt="You are a careful AI analyst who provides conversational answers based only on the provided facts.",
-            user_prompt=synth_prompt, 
-            history=chat_history if not filters_cleared_on_retry else [], # <-- THIS IS THE FIX
-            phase="synth"
-        )
-
-        # --- 13. ADD SYNTHESIZER DURATION ---
-        synth_duration = time.time() - synth_start_time
-
-        corruption_details = sorted(list(self.corruption_warnings)) if self.corruption_warnings else None
-
-        # --- 14. POST-SYNTHESIS: Evaluate final answer and optionally save dynamic example ---
-        try:
-            failure_keywords = [
-                "i'm sorry", "unfortunately", "i couldn't find", "i am unable",
-                "not available in the documents", "technical problem"
-            ]
-
-            # Protect against non-string final answers
-            final_text = (final_answer or "").lower()
-            is_successful_answer = not any(keyword in final_text for keyword in failure_keywords)
-
-            if outcome == "SUCCESS_DIRECT" and is_successful_answer and plan_json:
-                self.debug("Saving example to memory: SUCCESS_DIRECT and final answer looks good.")
+                self.debug("\n" + "="*50)
+                self.debug(f"📑 Final {len(collected_docs)} documents being sent to Synthesizer:")
                 try:
-                    self._save_dynamic_example(query, plan_json, session, outcome)
-
-                    # Calculate plan hash for logging if possible
-                    simplified_plan = plan_json.get("plan", [{}])[0].get("tool_call", {})
-                    if simplified_plan:
-                        templates = self.policy_engine.delexicalize(query, simplified_plan)
-                        plan_template = templates.get("plan_template")
-                        if plan_template:
-                            canonical_plan_str = json.dumps(plan_template, sort_keys=True)
-                            plan_hash = hashlib.sha256(canonical_plan_str.encode('utf-8')).hexdigest()
+                    debug_output = json.dumps(collected_docs, indent=2)
+                    print(debug_output)
                 except Exception as e:
-                    self.debug(f"Error saving dynamic example or calculating hash: {e}")
-            elif outcome == "SUCCESS_DIRECT":
-                self.debug("Skipping example save: Final answer looked like a soft failure.")
-        except Exception as e:
-            # Defensive: ensure post-synthesis bookkeeping never crashes the main flow
-            self.debug(f"Post-synthesis evaluation failed: {e}")
-        # --- END POST-SYNTHESIS BLOCK ---
+                    print(f"Could not print debug output: {e}")
+                self.debug("="*50 + "\n")
 
-        # Record the results for training using the fully corrected signature
-        execution_time = time.time() - start_time
+                if outcome in ["SUCCESS_DIRECT", "SUCCESS_FALLBACK"]:
+                    results_count = len(collected_docs)
+                    self.debug(f"Cleaning {results_count} docs for Synthesizer...")
+                    cleaned_docs_for_synth = self._clean_documents_for_synthesizer(collected_docs)
+                    final_context = {
+                        "status": "success",
+                        "summary": f"Found {results_count} relevant document(s).",
+                        "data": cleaned_docs_for_synth[:30]
+                    }
+                else:
+                    final_context = {"status": "empty", "summary": "I tried a precise search and a broad search, but could not find any relevant documents."}
 
-        # --- 15. MODIFY THE FINAL record_query_result CALL ---
-        self.training_system.record_query_result(
-            query=query,
-            plan=plan_json,
-            results_count=results_count,
-            execution_time=execution_time,
-            error_msg=error_msg,
-            execution_mode=execution_mode,
-            outcome=outcome,
-            analyst_mode=self.execution_mode,
-            final_answer=final_answer,
-            corruption_details=corruption_details,
+            except Exception as e:
+                if planner_duration == 0.0 and 'planner_start_time' in locals():
+                    planner_duration = time.time() - planner_start_time
+                if retrieval_duration == 0.0 and 'retrieval_start_time' in locals():
+                    retrieval_duration = time.time() - retrieval_start_time
+                import traceback
+                self.debug(f"An unexpected error occurred: {e}")
+                self.debug(f"Error Type: {type(e)}")
+                self.debug(f"Traceback: {traceback.format_exc()}")
+                error_msg = str(e)
+                if outcome == "FAIL_UNKNOWN":
+                    outcome = "FAIL_EXECUTION"
+                final_context = {"status": "error", "summary": f"I ran into a technical problem: {e}"}
 
-            # --- ADD ALL THE NEW FIELDS HERE ---
-            timestamp=start_datetime,
-            session_id=session.get('session_id'),
-            planner_duration=planner_duration,
-            retrieval_duration=retrieval_duration,
-            synth_duration=synth_duration,
-            planner_model=self.planner_llm.planner_model,
-            synth_model=self.synth_llm.synth_model,
-            plan_hash=plan_hash
-            # --- END OF NEW FIELDS ---
-        )
+            # --- Synthesizer Block ---
+            self.debug("Synthesizing final answer...")
+            synth_start_time = time.time()
+            context_for_llm = json.dumps(final_context, indent=2, ensure_ascii=False)
+            synth_prompt = PROMPT_TEMPLATES["final_synthesizer"].format(context=context_for_llm, query=query)
+            
+            final_answer = self.synth_llm.execute(
+                system_prompt="You are a careful AI analyst who provides conversational answers based only on the provided facts.",
+                user_prompt=synth_prompt, 
+                history=chat_history if not filters_cleared_on_retry else [],
+                phase="synth"
+            )
+            synth_duration = time.time() - synth_start_time
 
-        # --- NEW BLOCK 2: Save newly found entities to the session ---
-        if self.current_query_entities:
-            for entity_name in self.current_query_entities:
-                self._add_entity_to_session(session['session_id'], entity_name)
-        # --- END NEW BLOCK 2 ---
+            # --- Post-Synthesis Block ---
+            corruption_details = sorted(list(self.corruption_warnings)) if self.corruption_warnings else None
+            final_plan_hash = None 
+
+            try:
+                failure_keywords = ["i'm sorry", "unfortunately", "i couldn't find", "i am unable", "not available", "technical problem"]
+                is_successful_answer = not any(keyword in final_answer.lower() for keyword in failure_keywords)
+                if outcome.startswith("SUCCESS") and is_successful_answer and plan_json:
+                    self.debug("Saving example to memory: SUCCESS and final answer looks good.")
+                    final_plan_hash = self._save_dynamic_example(query, plan_json, session, outcome)
+                elif outcome.startswith("SUCCESS"):
+                    self.debug("Skipping example save: Final answer looked like a soft failure.")
+            except Exception as e:
+                self.debug(f"Post-synthesis evaluation or example saving failed: {e}")
+
+            # --- Logging Block ---
+            execution_time = time.time() - start_time
+            self.training_system.record_query_result(
+                query=query, plan=plan_json, results_count=results_count,
+                execution_time=execution_time, error_msg=error_msg,
+                execution_mode=execution_mode, outcome=outcome, analyst_mode=self.execution_mode,
+                final_answer=final_answer, corruption_details=corruption_details,
+                timestamp=start_datetime, session_id=session.get('session_id'),
+                planner_duration=planner_duration, retrieval_duration=retrieval_duration,
+                synth_duration=synth_duration, planner_model=self.planner_llm.planner_model,
+                synth_model=self.synth_llm.synth_model, plan_hash=final_plan_hash
+            )
+            
+            return final_answer, plan_json, collected_docs
+            # --- END ONLINE/SPLIT EXECUTION PATH ---
 
 
+
+
+# --- REPLACE THIS ENTIRE METHOD ---
+    def execute_reasoning_plan(self, query: str, session: dict) -> tuple[str, Optional[dict], List[dict]]:
+        """
+        [UPGRADED WITH OFFLINE MODE V2] The main orchestration method.
+        - If 'offline', it runs a simple *single-step* Planner -> Synth loop.
+        - If 'online', it first runs a "mini-LLM" triage to classify
+          the query, handles ambiguity, and uses chat history.
+        """
+        start_time = time.time()
+        start_datetime = datetime.now(timezone.utc)
         
-        return final_answer, plan_json, collected_docs
+        planner_duration = 0.0
+        retrieval_duration = 0.0
+        synth_duration = 0.0
+        plan_hash = None
         
+        context = session.get("structured_context", {})
+
+        # --- NEW OFFLINE/ONLINE LOGIC ---
+        if self.execution_mode == 'offline':
+            # --- START OFFLINE EXECUTION PATH (Single-Step) ---
+            self.debug("Offline mode: Running SINGLE-STEP plan. Skipping Triage, History, and Coreference.")
+            chat_history = [] # No history for offline mode
+            
+            plan_json = None
+            final_context = {}
+            error_msg = None
+            results_count = 0
+            
+            outcome = "FAIL_UNKNOWN"
+            execution_mode = "primary"
+            collected_docs = []
+
+            try:
+                planner_start_time = time.time()
+                
+                # --- Simplified Prompt Generation (Offline) ---
+                self.debug("-> Using 'planner_agent_offline' (single-step).")
+                dynamic_examples = "" # No examples for offline
+                
+                # Format the system prompt
+                prompt_safe_positions = list(self.all_positions) + ["Faculty", "Staff", "Admin"]
+                sys_prompt = PROMPT_TEMPLATES["planner_agent_offline"].format(
+                    all_programs_list=self.all_programs, all_departments_list=self.all_departments,
+                    all_positions_list=sorted(list(set(prompt_safe_positions))),
+                    all_doc_types_list=self.all_doc_types, all_statuses_list=self.all_statuses,
+                    dynamic_examples=dynamic_examples
+                    # Note: No structured_context_str for this prompt
+                )
+                planner_user_prompt = query
+                # --- End Simplified Prompt Generation ---
+
+                plan_raw = self.planner_llm.execute(
+                    system_prompt=sys_prompt, user_prompt=planner_user_prompt,
+                    json_mode=True, phase="planner",
+                    history=chat_history # Will be []
+                )
+        
+                # --- Manually Build Plan ---
+                # The offline planner returns a single tool call, not a multi-step plan.
+                tool_call_dict = self._repair_json(plan_raw)
+                
+                if not tool_call_dict or "tool_name" not in tool_call_dict:
+                    planner_duration = time.time() - planner_start_time
+                    outcome = "FAIL_PLANNER"
+                    raise ValueError(f"AI failed to select a valid tool. Last error: {plan_raw}")
+
+                # We manually wrap the single tool call into a multi-step
+                # plan structure so the rest of the code (logging, execution loop) works.
+                plan_json = {
+                    "plan": [
+                        {"tool_call": tool_call_dict},
+                        {"tool_call": {"tool_name": "finish_plan", "parameters": {}}}
+                    ]
+                }
+                self.debug(f"Offline planner selected tool: {tool_call_dict.get('tool_name')}")
+                
+                planner_duration = time.time() - planner_start_time
+
+                # --- Multi-Step Execution Loop (now runs our 2-step plan) ---
+                retrieval_start_time = time.time()
+                step_results = {}
+                collected_docs = []
+                plan_steps = plan_json.get("plan", []) # Will be [tool_call, finish_plan]
+
+                for i, step in enumerate(plan_steps):
+                    step_num = i + 1
+                    tool_call = step.get("tool_call", {})
+                    tool_name = tool_call.get("tool_name")
+                    params = tool_call.get("parameters", {})
+                    
+                    if not tool_name:
+                        self.debug(f"Step {step_num} is missing a tool_name. Stopping plan.")
+                        break
+                    
+                    # No placeholder resolution needed for this simple plan, but we'll keep the logic
+                    # in case the offline prompt is ever changed to be multi-step.
+                    try:
+                        resolved_params = self._resolve_placeholders(params, step_results)
+                        self.debug(f"   -> Executing Step {step_num}: {tool_name} with params: {resolved_params}")
+                    
+                    except Exception as e:
+                        self.debug(f"Error during placeholder resolution for step {step_num}: {e}")
+                        raise
+                    
+                    if tool_name == "finish_plan":
+                        self.debug("Plan execution complete.")
+                        break
+                    
+                    if tool_name in self.available_tools:
+                        tool_function = self.available_tools[tool_name]
+                        sig = inspect.signature(tool_function)
+                        valid_params = {k: v for k, v in resolved_params.items() if k in sig.parameters}
+                        
+                        step_output = tool_function(**valid_params)
+                        step_output_list = step_output if isinstance(step_output, list) else [step_output]
+                        step_results[step_num] = step_output_list
+                        collected_docs.extend(step_output_list)
+                    else:
+                        raise ValueError(f"Plan step {step_num} uses an unknown tool: '{tool_name}'")
+                
+                retrieval_duration = time.time() - retrieval_start_time
+                collected_docs = [doc for doc in collected_docs if doc.get("source_collection") not in ("system_signal", "system_note")]
+                
+                has_errors = any("error" in doc.get("status", "") for doc in collected_docs)
+                is_empty = (not collected_docs or all("empty" in doc.get("status", "") for doc in collected_docs)) and not has_errors
+
+                if has_errors:
+                    execution_mode = "primary"
+                    self.debug(f"Primary plan failed with an error. Reporting as FAIL_EXECUTION.")
+                    outcome = "FAIL_EXECUTION"
+                
+                elif is_empty:
+                    self.debug("Primary plan executed successfully but found no results. (FAIL_EMPTY)")
+                    outcome = "FAIL_EMPTY"
+                
+                else:
+                    outcome = "SUCCESS_DIRECT"
+
+                # --- De-duplication (Same as Online) ---
+                if collected_docs:
+                    self.debug(f"Original unfiltered doc count: {len(collected_docs)}. Starting de-duplication...")
+                    unique_docs = {}
+                    for doc in collected_docs:
+                        try: content_key = json.dumps(doc.get('content'), sort_keys=True)
+                        except TypeError: content_key = str(doc.get('content')) 
+                        if content_key and content_key not in unique_docs:
+                            unique_docs[content_key] = doc
+                    collected_docs = list(unique_docs.values())
+                    self.debug(f"Found {len(collected_docs)} unique documents after de-duplication.")
+
+                # --- Student Grouping (Same as Online) ---
+                if len(collected_docs) > 5:
+                    primary_tool_name = ""
+                    if plan_json and plan_json.get("plan"):
+                        primary_tool_name = plan_json.get("plan", [{}])[0].get("tool_call", {}).get("tool_name", "")
+                    
+                    first_doc_meta = collected_docs[0].get("metadata", {})
+                    is_student_data = "student_id" in first_doc_meta
+
+                    if is_student_data and primary_tool_name == "find_people":
+                        self.debug(f"-> Student result set ({len(collected_docs)} docs) detected for 'find_people'. Restructuring into groups.")
+                        grouped_students = defaultdict(list)
+                        for doc in collected_docs:
+                            meta = doc.get("metadata", {})
+                            group_key = f"{meta.get('course', 'N/A')} - Year {meta.get('year', 'N/A')} - Section {meta.get('section', 'N/A')}"
+                            grouped_students[group_key].append(doc)
+                        grouped_data = [{"source_collection": "grouped_students", "group_name": name, "students": docs} for name, docs in sorted(grouped_students.items())]
+                        collected_docs = grouped_data
+                    elif is_student_data:
+                        self.debug(f"-> Skipping student grouping. Primary tool was '{primary_tool_name}', not 'find_people'.")
+
+                self.debug("\n" + "="*50)
+                self.debug(f"📑 Final {len(collected_docs)} documents being sent to Synthesizer:")
+                try:
+                    debug_output = json.dumps(collected_docs, indent=2)
+                    print(debug_output)
+                except Exception as e:
+                    print(f"Could not print debug output: {e}")
+                self.debug("="*50 + "\n")
+
+                if outcome in ["SUCCESS_DIRECT", "SUCCESS_FALLBACK"]:
+                    results_count = len(collected_docs)
+                    self.debug(f"Cleaning {results_count} docs for Synthesizer...")
+                    cleaned_docs_for_synth = self._clean_documents_for_synthesizer(collected_docs)
+                    final_context = {
+                        "status": "success",
+                        "summary": f"Found {results_count} relevant document(s).",
+                        "data": cleaned_docs_for_synth[:30]
+                    }
+                else:
+                    final_context = {"status": "empty", "summary": "I tried a precise search, but could not find any relevant documents."}
+
+            except Exception as e:
+                if planner_duration == 0.0 and 'planner_start_time' in locals():
+                    planner_duration = time.time() - planner_start_time
+                if retrieval_duration == 0.0 and 'retrieval_start_time' in locals():
+                    retrieval_duration = time.time() - retrieval_start_time
+                import traceback
+                self.debug(f"An unexpected error occurred: {e}")
+                self.debug(f"Error Type: {type(e)}")
+                self.debug(f"Traceback: {traceback.format_exc()}")
+                error_msg = str(e)
+                if outcome == "FAIL_UNKNOWN":
+                    outcome = "FAIL_EXECUTION"
+                final_context = {"status": "error", "summary": f"I ran into a technical problem: {e}"}
+
+            # --- Synthesizer Block (Using OFFLINE prompt) ---
+            self.debug("Synthesizing final answer...")
+            synth_start_time = time.time()
+            context_for_llm = json.dumps(final_context, indent=2, ensure_ascii=False)
+            
+            # --- THIS IS THE CHANGE ---
+            synth_prompt = PROMPT_TEMPLATES["final_synthesizer_offline"].format(context=context_for_llm, query=query)
+            
+            final_answer = self.synth_llm.execute(
+                system_prompt="You are a careful AI analyst who provides conversational answers based only on the provided facts.",
+                user_prompt=synth_prompt, 
+                history=chat_history, # Will be [] for offline mode
+                phase="synth"
+            )
+            # --- END OF CHANGE ---
+            
+            synth_duration = time.time() - synth_start_time
+
+            # --- Post-Synthesis Block (Same as Online) ---
+            corruption_details = sorted(list(self.corruption_warnings)) if self.corruption_warnings else None
+            final_plan_hash = None 
+
+            try:
+                failure_keywords = ["i'm sorry", "unfortunately", "i couldn't find", "i am unable", "not available", "technical problem"]
+                is_successful_answer = not any(keyword in final_answer.lower() for keyword in failure_keywords)
+                if outcome.startswith("SUCCESS") and is_successful_answer and plan_json:
+                    self.debug("Saving example to memory: SUCCESS and final answer looks good.")
+                    final_plan_hash = self._save_dynamic_example(query, plan_json, session, outcome)
+                elif outcome.startswith("SUCCESS"):
+                    self.debug("Skipping example save: Final answer looked like a soft failure.")
+            except Exception as e:
+                self.debug(f"Post-synthesis evaluation or example saving failed: {e}")
+
+            # --- Logging Block (Same as Online) ---
+            execution_time = time.time() - start_time
+            self.training_system.record_query_result(
+                query=query, plan=plan_json, results_count=results_count,
+                execution_time=execution_time, error_msg=error_msg,
+                execution_mode=execution_mode, outcome=outcome, analyst_mode=self.execution_mode,
+                final_answer=final_answer, corruption_details=corruption_details,
+                timestamp=start_datetime, session_id=session.get('session_id'),
+                planner_duration=planner_duration, retrieval_duration=retrieval_duration,
+                synth_duration=synth_duration, planner_model=self.planner_llm.planner_model,
+                synth_model=self.synth_llm.synth_model, plan_hash=final_plan_hash
+            )
+            
+            return final_answer, plan_json, collected_docs
+            # --- END OFFLINE EXECUTION PATH ---
+
+        else:
+            # --- START ONLINE/SPLIT EXECUTION PATH (Original Code) ---
+            self.debug("Starting reasoning plan execution...")
+            # Note: start_time, start_datetime, durations, and context were initialized above
+            
+            # --- "MINI-LLM" TRIAGE STEP ---
+            triage_result = self._run_query_triage(query, session)
+            intent = triage_result.get("intent")
+            
+            if intent == "ANSWER_TO_CLARIFICATION":
+                query = triage_result.get("combined_query", query)
+                context["clarification_pending"] = False
+                self.debug(f"Triage: Proceeding with combined query: {query}")
+                
+            elif intent == "CONVERSATIONAL":
+                self.debug("Triage: Query is conversational. Routing to dedicated synth call.")
+                planner_start_time = time.time()
+                chat_history = self._get_topic_scoped_history(session, self.max_history_turns)
+                planner_duration = time.time() - planner_start_time
+
+                synth_start_time = time.time()
+                final_answer = self.synth_llm.execute(
+                    system_prompt="You are a friendly and helpful AI assistant for PDM. Respond naturally and conversationally to the user.",
+                    user_prompt=query,
+                    history=chat_history or [],
+                    phase="synth"
+                )
+                synth_duration = time.time() - synth_start_time
+                execution_time = time.time() - start_time
+                
+                self.training_system.record_query_result(
+                    query=query, plan={"plan": [{"tool_call": {"tool_name": "answer_conversational_query"}}]}, 
+                    outcome="SUCCESS_CONVERSATIONAL", 
+                    execution_time=execution_time, final_answer=final_answer, results_count=0,
+                    timestamp=start_datetime, session_id=session.get('session_id'),
+                    planner_duration=planner_duration, retrieval_duration=0.0, synth_duration=synth_duration,
+                    planner_model=self.planner_llm.planner_model, synth_model=self.synth_llm.synth_model,
+                    plan_hash=None
+                )
+                return final_answer, {"plan": [{"tool_call": {"tool_name": "answer_conversational_query"}}]}, []
+
+            elif intent == "NEW_AMBIGUOUS_QUERY":
+                self.debug("Triage: Query is new and ambiguous. Forcing clarification.")
+                planner_start_time = time.time()
+                sys_prompt = PROMPT_TEMPLATES["ambiguity_resolver_prompt"].format(db_schema_summary=self.db_schema_summary)
+                plan_raw = self.planner_llm.execute(
+                    system_prompt=sys_prompt, user_prompt=query,
+                    json_mode=True, phase="planner", history=[]
+                )
+                plan_json = self._repair_json(plan_raw)
+                planner_duration = time.time() - planner_start_time
+                
+                try:
+                    tool_call = plan_json.get("plan", [{}])[0].get("tool_call", {})
+                    if tool_call.get("tool_name") == "request_clarification":
+                        question_for_user = tool_call.get("parameters", {}).get("question_for_user", "Could you provide more details?")
+                    else:
+                        question_for_user = "I'm sorry, I'm not sure what you mean. Could you provide more details?"
+                except Exception:
+                    question_for_user = "I'm not sure what you mean. Could you rephrase that?"
+                
+                context["clarification_pending"] = True
+                context["original_ambiguous_query"] = query
+                self.sessions_collection.update_one(
+                    {"session_id": session["session_id"]},
+                    {"$set": {"structured_context": context, "updated_at": datetime.now(timezone.utc)}},
+                    upsert=True
+                )
+                self._update_session_history(session['session_id'], query, question_for_user)
+                return question_for_user, plan_json, []
+
+            # --- END OF TRIAGE LOGIC ---
+            
+            chat_history = self._get_topic_scoped_history(session, self.max_history_turns)
+            summary = session.get("conversation_summary", "No summary yet.")
+            
+            plan_json = None
+            final_context = {}
+            error_msg = None
+            results_count = 0
+            
+            outcome = "FAIL_UNKNOWN"
+            execution_mode = "primary"
+            collected_docs = []
+            
+            try:
+                max_retries = 5
+                planner_start_time = time.time()
+
+                coref_params = self._coref_to_params(query, session)
+                if coref_params:
+                    self.debug(f"Injecting coreference params into query: {coref_params}")
+                    query = f"{query}\n\n[System Hint: The pronoun in the query (he/she/his/her) refers to: {coref_params.get('person_name')}]"
+                
+                filters_cleared_on_retry = False
+
+                for attempt in range(max_retries):
+                    self.debug(f"Planner Attempt {attempt + 1}/{max_retries}...")
+                    
+                    if filters_cleared_on_retry:
+                        self.debug("!!! 422 Recovery: Retrying with a minimal prompt (no context, no examples).")
+                        planner_context = {"current_topic": "None.", "active_filters": {}}
+                        structured_context_str = json.dumps(planner_context, indent=2)
+                        dynamic_examples = ""
+                        sys_prompt_template = PROMPT_TEMPLATES["planner_agent"]
+                        history_for_llm = []
+                    else:
+                        self.debug("-> Using 'Full Planner Prompt' with context.")
+                        dynamic_examples = self._load_dynamic_examples(query)
+                        
+                        full_context = session.get("structured_context", {})
+                        planner_context = {
+                            "current_topic": full_context.get("current_topic"),
+                            "active_filters": {}
+                        }
+                        query_lower = query.strip().lower()
+                        new_topic_starters = ["who is", "what is", "what are", "show me", "list", "find", "get", "compare"]
+                        is_new_topic = any(query_lower.startswith(starter) for starter in new_topic_starters)
+                        
+                        if not is_new_topic:
+                            self.debug("Query seems like a follow-up. Passing active filters.")
+                            planner_context["active_filters"] = full_context.get("active_filters", {})
+                        else:
+                            self.debug("Query seems like a new topic. Wiping active filters for Planner.")
+                        
+                        structured_context_str = json.dumps(planner_context, indent=2)
+                        self.debug(f"Sending pruned context to Planner: {structured_context_str}")
+                        sys_prompt_template = PROMPT_TEMPLATES["planner_agent"]
+                        history_for_llm = chat_history
+                    
+                    prompt_safe_positions = list(self.all_positions) + ["Faculty", "Staff", "Admin"]
+                    sys_prompt = sys_prompt_template.format(
+                        all_programs_list=self.all_programs, all_departments_list=self.all_departments,
+                        all_positions_list=sorted(list(set(prompt_safe_positions))),
+                        all_doc_types_list=self.all_doc_types, all_statuses_list=self.all_statuses,
+                        dynamic_examples=dynamic_examples,
+                        structured_context_str=structured_context_str
+                    )
+                    planner_user_prompt = query
+
+                    plan_raw = self.planner_llm.execute(
+                        system_prompt=sys_prompt, user_prompt=planner_user_prompt,
+                        json_mode=True, phase="planner",
+                        history=history_for_llm
+                    )
+            
+                    plan_json = self._repair_json(plan_raw)
+                    
+                    is_valid_plan, validation_error = self._validate_plan(plan_json)
+
+                    if is_valid_plan:
+                        self.debug(f"Valid multi-step plan received on attempt {attempt + 1}.")
+                        break
+                    
+                    self.debug(f"Plan validation failed: {validation_error}")
+                    plan_json = None
+                    
+                    if "422" in plan_raw:
+                        self.debug("!!! 422 Error detected. The API rejected the context.")
+                        if not filters_cleared_on_retry:
+                            self.debug("   -> Will retry ONCE with all active_filters cleared.")
+                            filters_cleared_on_retry = True
+                        else:
+                            self.debug("   -> Already retried with cleared filters. Failing permanently.")
+                            break
+                    else:
+                        self.debug(f"Attempt {attempt + 1} failed (Not a 422). Retrying...")
+                    time.sleep(1)
+                
+                planner_duration = time.time() - planner_start_time
+                
+                if not plan_json:
+                    outcome = "FAIL_PLANNER"
+                    raise ValueError(f"AI failed to select a valid plan after {max_retries} attempts. Last error: {plan_raw}")
+
+                # --- Multi-Step Execution Loop ---
+                retrieval_start_time = time.time()
+                step_results = {}
+                collected_docs = []
+                plan_steps = plan_json.get("plan", [])
+
+                for i, step in enumerate(plan_steps):
+                    step_num = i + 1
+                    tool_call = step.get("tool_call", {})
+                    tool_name = tool_call.get("tool_name")
+                    params = tool_call.get("parameters", {})
+                    
+                    if not tool_name:
+                        self.debug(f"Step {step_num} is missing a tool_name. Stopping plan.")
+                        break
+                    
+                    try:
+                        resolved_params = self._resolve_placeholders(params, step_results)
+                        params_str = json.dumps(resolved_params)
+                        if '$' in params_str:
+                            unresolved = [v for v in re.findall(r'"(\$.*?)"', params_str)]
+                            if unresolved:
+                                raise ValueError(f"Plan failed at step {step_num}: Required value {unresolved[0]} was not found.")
+                        self.debug(f"   -> Executing Step {step_num}: {tool_name} with params: {resolved_params}")
+                    
+                    except Exception as e:
+                        self.debug(f"Error during placeholder resolution or execution for step {step_num}: {e}")
+                        raise
+                    
+                    if tool_name == "finish_plan":
+                        self.debug("Plan execution complete.")
+                        break
+                    
+                    if tool_name in self.available_tools:
+                        tool_function = self.available_tools[tool_name]
+                        sig = inspect.signature(tool_function)
+                        valid_params = {k: v for k, v in resolved_params.items() if k in sig.parameters}
+                        dropped = [k for k in resolved_params if k not in sig.parameters]
+                        if dropped:
+                            self.debug(f"Dropping unexpected parameters for {tool_name}: {dropped}")
+                        
+                        step_output = tool_function(**valid_params)
+                        step_output_list = step_output if isinstance(step_output, list) else [step_output]
+                        step_results[step_num] = step_output_list
+                        collected_docs.extend(step_output_list)
+                    else:
+                        raise ValueError(f"Plan step {step_num} uses an unknown tool: '{tool_name}'")
+                
+                retrieval_duration = time.time() - retrieval_start_time
+                collected_docs = [doc for doc in collected_docs if doc.get("source_collection") not in ("system_signal", "system_note")]
+                
+                has_errors = any("error" in doc.get("status", "") for doc in collected_docs)
+                is_empty = (not collected_docs or all("empty" in doc.get("status", "") for doc in collected_docs)) and not has_errors
+
+                if has_errors:
+                    execution_mode = "primary"
+                    self.debug(f"Primary plan failed with an error. Reporting as FAIL_EXECUTION.")
+                    outcome = "FAIL_EXECUTION"
+                
+                elif is_empty:
+                    self.debug("Primary plan executed successfully but found no results. (FAIL_EMPTY)")
+                    outcome = "FAIL_EMPTY"
+                
+                else:
+                    outcome = "SUCCESS_DIRECT"
+
+                if collected_docs:
+                    self.debug(f"Original unfiltered doc count: {len(collected_docs)}. Starting de-duplication...")
+                    unique_docs = {}
+                    for doc in collected_docs:
+                        try: content_key = json.dumps(doc.get('content'), sort_keys=True)
+                        except TypeError: content_key = str(doc.get('content')) 
+                        if content_key and content_key not in unique_docs:
+                            unique_docs[content_key] = doc
+                    collected_docs = list(unique_docs.values())
+                    self.debug(f"Found {len(collected_docs)} unique documents after de-duplication.")
+
+                if len(collected_docs) > 5:
+                    primary_tool_name = ""
+                    if plan_json and plan_json.get("plan"):
+                        primary_tool_name = plan_json.get("plan", [{}])[0].get("tool_call", {}).get("tool_name", "")
+                    
+                    first_doc_meta = collected_docs[0].get("metadata", {})
+                    is_student_data = "student_id" in first_doc_meta
+
+                    if is_student_data and primary_tool_name == "find_people":
+                        self.debug(f"-> Student result set ({len(collected_docs)} docs) detected for 'find_people'. Restructuring into groups.")
+                        grouped_students = defaultdict(list)
+                        for doc in collected_docs:
+                            meta = doc.get("metadata", {})
+                            group_key = f"{meta.get('course', 'N/A')} - Year {meta.get('year', 'N/A')} - Section {meta.get('section', 'N/A')}"
+                            grouped_students[group_key].append(doc)
+                        grouped_data = [{"source_collection": "grouped_students", "group_name": name, "students": docs} for name, docs in sorted(grouped_students.items())]
+                        collected_docs = grouped_data
+                    elif is_student_data:
+                        self.debug(f"-> Skipping student grouping. Primary tool was '{primary_tool_name}', not 'find_people'.")
+
+                self.debug("\n" + "="*50)
+                self.debug(f"📑 Final {len(collected_docs)} documents being sent to Synthesizer:")
+                try:
+                    debug_output = json.dumps(collected_docs, indent=2)
+                    print(debug_output)
+                except Exception as e:
+                    print(f"Could not print debug output: {e}")
+                self.debug("="*50 + "\n")
+
+                if outcome in ["SUCCESS_DIRECT", "SUCCESS_FALLBACK"]:
+                    results_count = len(collected_docs)
+                    self.debug(f"Cleaning {results_count} docs for Synthesizer...")
+                    cleaned_docs_for_synth = self._clean_documents_for_synthesizer(collected_docs)
+                    final_context = {
+                        "status": "success",
+                        "summary": f"Found {results_count} relevant document(s).",
+                        "data": cleaned_docs_for_synth[:30]
+                    }
+                else:
+                    final_context = {"status": "empty", "summary": "I tried a precise search and a broad search, but could not find any relevant documents."}
+
+            except Exception as e:
+                if planner_duration == 0.0 and 'planner_start_time' in locals():
+                    planner_duration = time.time() - planner_start_time
+                if retrieval_duration == 0.0 and 'retrieval_start_time' in locals():
+                    retrieval_duration = time.time() - retrieval_start_time
+                import traceback
+                self.debug(f"An unexpected error occurred: {e}")
+                self.debug(f"Error Type: {type(e)}")
+                self.debug(f"Traceback: {traceback.format_exc()}")
+                error_msg = str(e)
+                if outcome == "FAIL_UNKNOWN":
+                    outcome = "FAIL_EXECUTION"
+                final_context = {"status": "error", "summary": f"I ran into a technical problem: {e}"}
+
+            # --- Synthesizer Block (Using ONLINE prompt) ---
+            self.debug("Synthesizing final answer...")
+            synth_start_time = time.time()
+            context_for_llm = json.dumps(final_context, indent=2, ensure_ascii=False)
+            
+            # --- THIS IS THE ORIGINAL "ONLINE" PROMPT ---
+            synth_prompt = PROMPT_TEMPLATES["final_synthesizer"].format(context=context_for_llm, query=query)
+            
+            final_answer = self.synth_llm.execute(
+                system_prompt="You are a careful AI analyst who provides conversational answers based only on the provided facts.",
+                user_prompt=synth_prompt, 
+                history=chat_history if not filters_cleared_on_retry else [],
+                phase="synth"
+            )
+            # --- END OF CHANGE ---
+            
+            synth_duration = time.time() - synth_start_time
+
+            # --- Post-Synthesis Block ---
+            corruption_details = sorted(list(self.corruption_warnings)) if self.corruption_warnings else None
+            final_plan_hash = None 
+
+            try:
+                failure_keywords = ["i'm sorry", "unfortunately", "i couldn't find", "i am unable", "not available", "technical problem"]
+                is_successful_answer = not any(keyword in final_answer.lower() for keyword in failure_keywords)
+                if outcome.startswith("SUCCESS") and is_successful_answer and plan_json:
+                    self.debug("Saving example to memory: SUCCESS and final answer looks good.")
+                    final_plan_hash = self._save_dynamic_example(query, plan_json, session, outcome)
+                elif outcome.startswith("SUCCESS"):
+                    self.debug("Skipping example save: Final answer looked like a soft failure.")
+            except Exception as e:
+                self.debug(f"Post-synthesis evaluation or example saving failed: {e}")
+
+            # --- Logging Block ---
+            execution_time = time.time() - start_time
+            self.training_system.record_query_result(
+                query=query, plan=plan_json, results_count=results_count,
+                execution_time=execution_time, error_msg=error_msg,
+                execution_mode=execution_mode, outcome=outcome, analyst_mode=self.execution_mode,
+                final_answer=final_answer, corruption_details=corruption_details,
+                timestamp=start_datetime, session_id=session.get('session_id'),
+                planner_duration=planner_duration, retrieval_duration=retrieval_duration,
+                synth_duration=synth_duration, planner_model=self.planner_llm.planner_model,
+                synth_model=self.synth_llm.synth_model, plan_hash=final_plan_hash
+            )
+            
+            return final_answer, plan_json, collected_docs
+            # --- END ONLINE/SPLIT EXECUTION PATH ---
+
+
+
     def web_start_ai_analyst(self, user_query: str, session_id: str):
         """
         [CORRECTED VERSION] Executes the AI plan for a specific user session.
